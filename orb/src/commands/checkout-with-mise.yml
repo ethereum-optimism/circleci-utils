@@ -58,3 +58,7 @@ steps:
       key: mise-v5-{{ checksum ".executor-user" }}-{{ checksum "mise.toml" }}
       paths:
         - /data/mise-data
+  - run:
+      name: Delete executor file
+      command: |
+        rm -f .executor-user
