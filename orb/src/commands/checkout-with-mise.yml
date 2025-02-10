@@ -1,5 +1,5 @@
 description: >
-  Initialize the mise environment.
+  Checkout then initialize the mise environment.
 steps:
   - checkout
   - run:
