@@ -44,6 +44,15 @@ steps:
 
         token=$(cat $SECRET_ACCESS_TOKEN_FILE_PATH) 
 
+        # Store the absolute path of the target folder
+        TARGET_FOLDER=$(realpath "<< parameters.folder >>")
+
+        # Check if the target folder is within a git repository
+        if ! git -C "${TARGET_FOLDER}" rev-parse --git-dir > /dev/null 2>&1; then
+          echo "Error: The specified folder '${TARGET_FOLDER}' is not within a git repository."
+          exit 1
+        fi
+
         if [ -z "<< parameters.commit-username >>" ]; then
           # Get the username of the user that triggered the event
           USERNAME=${CIRCLE_USERNAME}
@@ -63,13 +72,22 @@ steps:
         git config --global user.name "${USERNAME}"
         git config --global user.email "${USER_EMAIL}"
 
-        cd "<< parameters.folder >>"
+        # Ensure we're in the git repository root
+        cd "$(git rev-parse --show-toplevel)"
 
-        git pull
+        # Fetch the target branch if it exists remotely
+        if git ls-remote --heads origin "<< parameters.branch >>" | grep -q "<< parameters.branch >>"; then
+          # Fetch the branch
+          git fetch origin "<< parameters.branch >>"
+          # Create new branch from the remote if it doesn't exist locally
+          git checkout -B "<< parameters.branch >>" "origin/<< parameters.branch >>"
+        else
+          # Create new branch if it doesn't exist
+          git checkout -b "<< parameters.branch >>"
+        fi
 
-        # Stage changes first
-        git add . -n  # Dry run to show what would be added
-        git add .
+        # Stage only the files from the target folder
+        git add "${TARGET_FOLDER}"
 
         # Create commit if there are changes
         if git diff --staged --quiet; then
