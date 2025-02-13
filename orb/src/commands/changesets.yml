@@ -1,8 +1,68 @@
 description: >
   Run changesets release.
-run:
+parameters:
+  setupGitUser:
+    type: boolean
+    default: true
+    description: "Whether to setup git user"
+  createGithubReleases:
+    type: boolean
+    default: false
+    description: "Whether to create GitHub releases"
+  publish:
+    type: string
+    default: ""
+    description: "Command to run for publishing"
+  version:
+    type: string
+    default: ""
+    description: "Command to run for versioning"
+  githubToken:
+    type: string
+    description: "GitHub token with write permissions for the repository"
+steps:
   - name: Run the release action
-    command: <<include(scripts/run-changesets-action.sh)>>
+    command: |
+      # First we make sure we have node installed
+      if ! [ -x "$(command -v node)" ]; then
+        echo 'Missing node binary' >&2
+        exit 1
+      fi
+
+      # And we check that the script has been included
+      if [ -z "$CHANGESETS_ACTION_SCRIPT" ]; then
+          echo "Missing changesets action script. Please make sure to export it as CHANGESETS_ACTION_SCRIPT env variable" >&2
+          exit 1
+      fi
+
+      # Some of the environment variables we need are not available as pipeline values
+      export GITHUB_REPOSITORY=${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}
+      export GITHUB_SHA="$(git symbolic-ref HEAD)" 
+
+      # Setup an authenticated remote
+      git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+
+      # Run the changesets action by piping the script to node
+      echo $CHANGESETS_ACTION_SCRIPT | node 
+
+
     environment:
       # This will take the whole changesets script and place its contents into the CHANGESETS_ACTION_SCRIPT env variable
       CHANGESETS_ACTION_SCRIPT: <<include(modules/changesets-action/dist/index.js)>>
+
+      # The github action script expects these as its inputs
+      INPUT_SETUPGITUSER: << parameters.setupGitUser >>
+      INPUT_CREATEGITHUBRELEASES: << parameters.createGithubReleases >>
+      INPUT_PUBLISH: << parameters.publish >>
+      INPUT_VERSION: << parameters.version >>
+
+      # GitHub token will be used to create release branches and versioning PRs
+      GITHUB_TOKEN: << parameters.githubToken >>
+
+      # These need to be setup for the action so the environment mimics the github workflow environment
+      GITHUB_REPOSITORY: 
+      GITHUB_REF_NAME: << pipeline.git.branch >>
+      GITHUB_SHA: << pipeline.git.revision >>
+      GITHUB_SERVER_URL: https://github.com
+      GITHUB_API_URL: https://api.github.com
+      GITHUB_GRAPHQL_URL: https://api.github.com/graphql
