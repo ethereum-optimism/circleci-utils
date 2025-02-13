@@ -1,4 +1,8 @@
 description: >
   Run changesets release.
 run:
-  
+  - name: Run the release action
+    command: <<include(scripts/run-changesets-action.sh)>>
+    environment:
+      # This will take the whole changesets script and place its contents into the CHANGESETS_ACTION_SCRIPT env variable
+      CHANGESETS_ACTION_SCRIPT: <<include(modules/changesets-action/dist/index.js)>>
