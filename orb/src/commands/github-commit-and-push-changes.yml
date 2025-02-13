@@ -78,6 +78,9 @@ steps:
         # Fetch all remote branches
         git fetch origin
 
+        # Stash any changes in the working directory
+        git stash push -u
+
         # Check if the branch exists remotely
         if git show-ref --verify --quiet "refs/remotes/origin/<< parameters.branch >>"; then
           echo "Branch << parameters.branch >> exists remotely, using it as base..."
@@ -88,6 +91,9 @@ steps:
           # Create new branch from current HEAD if it doesn't exist
           git checkout -b "<< parameters.branch >>" HEAD
         fi
+
+        # Reapply the stashed changes
+        git stash pop
 
         # Stage only the files from the target folder
         git add "${TARGET_FOLDER}"
