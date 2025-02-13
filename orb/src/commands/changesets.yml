@@ -35,9 +35,24 @@ steps:
           exit 1
       fi
 
+      # 
       # Some of the environment variables we need are not available as pipeline values
+      # 
+
+      # We need to string manipulate the GITHUB_REPOSITORY into existence
       export GITHUB_REPOSITORY=${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}
-      export GITHUB_SHA="$(git symbolic-ref HEAD)" 
+
+      # And populate the ref short & long names
+      if [ -n "$<< pipeline.git.branch >>" ]; then
+        GITHUB_REF_NAME="<< pipeline.git.branch >>"
+        GITHUB_REF="refs/heads/$GITHUB_REF_NAME"
+      elif [ -n "$<< pipeline.git.tag >>" ]; then
+        GITHUB_REF_NAME="<< pipeline.git.tag >>"
+        GITHUB_REF="refs/tags/$GITHUB_REF_NAME"
+      else
+        echo "Pipeline is not running for a branch or a tag" >&2
+        exit 1
+      fi
 
       # Setup an authenticated remote
       git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
@@ -60,8 +75,6 @@ steps:
       GITHUB_TOKEN: << parameters.githubToken >>
 
       # These need to be setup for the action so the environment mimics the github workflow environment
-      GITHUB_REPOSITORY: 
-      GITHUB_REF_NAME: << pipeline.git.branch >>
       GITHUB_SHA: << pipeline.git.revision >>
       GITHUB_SERVER_URL: https://github.com
       GITHUB_API_URL: https://api.github.com
