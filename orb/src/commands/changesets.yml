@@ -60,7 +60,6 @@ steps:
       # Run the changesets action by piping the script to node
       echo $CHANGESETS_ACTION_SCRIPT | node 
 
-
     environment:
       # This will take the whole changesets script and place its contents into the CHANGESETS_ACTION_SCRIPT env variable
       CHANGESETS_ACTION_SCRIPT: <<include(modules/changesets-action/dist/index.js)>>
