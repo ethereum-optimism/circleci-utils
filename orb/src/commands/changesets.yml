@@ -17,9 +17,14 @@ parameters:
     type: string
     default: ""
     description: "Command to run for versioning"
-  githubToken:
+  githubTokenName:
+    type: env_var_name
+    default: GITHUB_TOKEN_GOVERNANCE
+    description: "Name of GitHub token environment variable containing a token with write permissions for the repository"
+  githubReleaseRepository:
     type: string
-    description: "GitHub token with write permissions for the repository"
+    default: "${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+    description: "Name of github repository to which the release branches will be pushed. In the form of username/reponame"
 steps:
   - name: Run the release action
     command: |
@@ -27,6 +32,13 @@ steps:
       if ! [ -x "$(command -v node)" ]; then
         echo 'Missing node binary' >&2
         exit 1
+      fi
+
+      # Now we check that we have a github token
+      export GITHUB_TOKEN="${<< parameters.githubTokenName >>}"
+      if [ -z "$GITHUB_TOKEN" ]; then
+          echo "Missing github token. Please make sure to authenticate to github before running the release command" >&2
+          exit 1
       fi
 
       # And we check that the script has been included
@@ -40,7 +52,7 @@ steps:
       # 
 
       # We need to string manipulate the GITHUB_REPOSITORY into existence
-      export GITHUB_REPOSITORY=${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}
+      export GITHUB_REPOSITORY="<< parameters.githubReleaseRepository >>"
 
       # And populate the ref short & long names
       if [ -n "$<< pipeline.git.branch >>" ]; then
@@ -69,9 +81,6 @@ steps:
       INPUT_CREATEGITHUBRELEASES: << parameters.createGithubReleases >>
       INPUT_PUBLISH: << parameters.publish >>
       INPUT_VERSION: << parameters.version >>
-
-      # GitHub token will be used to create release branches and versioning PRs
-      GITHUB_TOKEN: << parameters.githubToken >>
 
       # These need to be setup for the action so the environment mimics the github workflow environment
       GITHUB_SHA: << pipeline.git.revision >>
