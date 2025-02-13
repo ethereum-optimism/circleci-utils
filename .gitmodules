@@ -1,0 +1,3 @@
+[submodule "changesets-action"]
+	path = orb/src/modules/changesets-action
+	url = https://github.com/changesets/action.git
