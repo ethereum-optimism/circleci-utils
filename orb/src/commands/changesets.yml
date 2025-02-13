@@ -1,0 +1,90 @@
+description: >
+  Run changesets release.
+parameters:
+  setupGitUser:
+    type: boolean
+    default: true
+    description: "Whether to setup git user"
+  createGithubReleases:
+    type: boolean
+    default: false
+    description: "Whether to create GitHub releases"
+  publish:
+    type: string
+    default: ""
+    description: "Command to run for publishing"
+  version:
+    type: string
+    default: ""
+    description: "Command to run for versioning"
+  githubTokenName:
+    type: env_var_name
+    default: GITHUB_TOKEN_GOVERNANCE
+    description: "Name of GitHub token environment variable containing a token with write permissions for the repository"
+  githubReleaseRepository:
+    type: string
+    default: "${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+    description: "Name of github repository to which the release branches will be pushed. In the form of username/reponame"
+steps:
+  - run:
+      name: Run the release action
+      command: |
+        # First we make sure we have node installed
+        if ! [ -x "$(command -v node)" ]; then
+          echo 'Missing node binary' >&2
+          exit 1
+        fi
+
+        # Now we check that we have a github token
+        export GITHUB_TOKEN="${<< parameters.githubTokenName >>}"
+        if [ -z "$GITHUB_TOKEN" ]; then
+            echo "Missing github token. Please make sure to authenticate to github before running the release command" >&2
+            exit 1
+        fi
+
+        # And we check that the script has been included
+        if [ -z "$CHANGESETS_ACTION_SCRIPT" ]; then
+            echo "Missing changesets action script. Please make sure to export it as CHANGESETS_ACTION_SCRIPT env variable" >&2
+            exit 1
+        fi
+
+        # Some of the environment variables we need are not available as pipeline values
+
+        export GITHUB_REPOSITORY="<< parameters.githubReleaseRepository >>"
+        export GITHUB_SHA="${CIRCLE_SHA1}"
+
+
+        # And populate the ref short & long names
+        if [ -n "${CIRCLE_BRANCH}" ]; then
+          GITHUB_REF_NAME="${CIRCLE_BRANCH}"
+          GITHUB_REF="refs/heads/$GITHUB_REF_NAME"
+        elif [ -n "${CIRCLE_TAG}" ]; then
+          GITHUB_REF_NAME="${CIRCLE_TAG}"
+          GITHUB_REF="refs/tags/$GITHUB_REF_NAME"
+        else
+          echo "Pipeline is not running for a branch or a tag" >&2
+          exit 1
+        fi
+
+
+        # Setup an authenticated remote
+        git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+
+        # Run the changesets action by piping the script to node
+        echo $CHANGESETS_ACTION_SCRIPT | node 
+
+      environment:
+        # This will take the whole changesets script and place its contents into the CHANGESETS_ACTION_SCRIPT env variable
+        
+        # The github action script expects these as its inputs
+        INPUT_SETUPGITUSER: << parameters.setupGitUser >>
+        INPUT_CREATEGITHUBRELEASES: << parameters.createGithubReleases >>
+        INPUT_PUBLISH: << parameters.publish >>
+        INPUT_VERSION: << parameters.version >>
+
+        # These need to be setup for the action so the environment mimics the github workflow environment
+        GITHUB_SERVER_URL: https://github.com
+        GITHUB_API_URL: https://api.github.com
+        GITHUB_GRAPHQL_URL: https://api.github.com/graphql
+
+        CHANGESETS_ACTION_SCRIPT: ""
