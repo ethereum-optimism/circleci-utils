@@ -35,6 +35,20 @@ steps:
           exit 1
         fi
 
+        export INPUT_SETUPGITUSER=<< parameters.setupGitUser >>
+        export INPUT_CREATEGITHUBRELEASES=<< parameters.createGithubReleases >>
+        export INPUT_PUBLISH="<< parameters.publish >>"
+        export INPUT_VERSION="<< parameters.version >>"
+
+        export GITHUB_SHA="${CIRCLE_SHA1}"
+        export GITHUB_REPOSITORY=<< parameters.githubReleaseRepository >>
+        export GITHUB_SERVER_URL="https://github.com" 
+        export GITHUB_API_URL="https://api.github.com" 
+        export GITHUB_GRAPHQL_URL="https://api.github.com/graphql" 
+
+       
+        echo "INPUT_CREATEGITHUBRELEASES: $INPUT_CREATEGITHUBRELEASES"
+
         # Now we check that we have a github token
         export GITHUB_TOKEN="${<< parameters.githubTokenName >>}"
         if [ -z "$GITHUB_TOKEN" ]; then
@@ -42,25 +56,21 @@ steps:
             exit 1
         fi
 
-        # And we check that the script has been included
-        if [ -z "$CHANGESETS_ACTION_SCRIPT" ]; then
-            echo "Missing changesets action script. Please make sure to export it as CHANGESETS_ACTION_SCRIPT env variable" >&2
-            exit 1
-        fi
+        # make temp directory
+        TEMP_DIR=$(mktemp -d)
+        curl -L https://raw.githubusercontent.com/ethereum-optimism/circleci-utils/refs/heads/main/external_scripts/changesets/1.4.9/index.js -o $TEMP_DIR/index.js 
 
         # Some of the environment variables we need are not available as pipeline values
 
-        export GITHUB_REPOSITORY="<< parameters.githubReleaseRepository >>"
-        export GITHUB_SHA="${CIRCLE_SHA1}"
 
 
         # And populate the ref short & long names
         if [ -n "${CIRCLE_BRANCH}" ]; then
-          GITHUB_REF_NAME="${CIRCLE_BRANCH}"
-          GITHUB_REF="refs/heads/$GITHUB_REF_NAME"
+          export GITHUB_REF_NAME="${CIRCLE_BRANCH}"
+          export GITHUB_REF="refs/heads/$GITHUB_REF_NAME"
         elif [ -n "${CIRCLE_TAG}" ]; then
-          GITHUB_REF_NAME="${CIRCLE_TAG}"
-          GITHUB_REF="refs/tags/$GITHUB_REF_NAME"
+          export GITHUB_REF_NAME="${CIRCLE_TAG}"
+          export GITHUB_REF="refs/tags/$GITHUB_REF_NAME"
         else
           echo "Pipeline is not running for a branch or a tag" >&2
           exit 1
@@ -71,20 +81,4 @@ steps:
         git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
 
         # Run the changesets action by piping the script to node
-        echo $CHANGESETS_ACTION_SCRIPT | node 
-
-      environment:
-        # This will take the whole changesets script and place its contents into the CHANGESETS_ACTION_SCRIPT env variable
-        
-        # The github action script expects these as its inputs
-        INPUT_SETUPGITUSER: << parameters.setupGitUser >>
-        INPUT_CREATEGITHUBRELEASES: << parameters.createGithubReleases >>
-        INPUT_PUBLISH: << parameters.publish >>
-        INPUT_VERSION: << parameters.version >>
-
-        # These need to be setup for the action so the environment mimics the github workflow environment
-        GITHUB_SERVER_URL: https://github.com
-        GITHUB_API_URL: https://api.github.com
-        GITHUB_GRAPHQL_URL: https://api.github.com/graphql
-
-        CHANGESETS_ACTION_SCRIPT: ""
+        node $TEMP_DIR/index.js
