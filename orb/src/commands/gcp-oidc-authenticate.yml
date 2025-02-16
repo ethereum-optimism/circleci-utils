@@ -33,8 +33,8 @@ steps:
   - run:
       name: "Create OIDC credential configuration"
       command: |
-        if [ "<< parameters.condition >>" != "always" ] && [ "<< parameters.condition >>" != "0" ]; then
-          echo "Skipping command because condition is not met"
+        if [ "<< parameters.condition >>" != "always" ] && [ "<< parameters.condition >>" != "0" ] && [ "<< parameters.condition >>" != "true" ]; then
+          echo "Skipping command because condition (<< parameters.condition >>) is not met"
           exit 0
         fi
 

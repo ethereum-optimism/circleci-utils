@@ -30,9 +30,9 @@ steps:
   - run:
       name: Run Issue-Metrics Tool
       command: |
-        if [ "<< parameters.condition >>" != "always" ] && [ "<< parameters.condition >>" != "0" ]; then
-              echo "Skipping command because condition is not met"
-              exit 0
+        if [ "<< parameters.condition >>" != "always" ] && [ "<< parameters.condition >>" != "0" ] && [ "<< parameters.condition >>" != "true" ]; then
+          echo "Skipping command because condition (<< parameters.condition >>) is not met"
+          exit 0
         fi
 
         if [ "$(docker ps -aq -f name=issue-metrics-run)" ]; then

@@ -1,5 +1,5 @@
 description: >
-  This command commit and push a folder change to a specific repo/branch
+  This command commit and push a file change to a specific repo/branch
 parameters:
   repo:
     type: string
@@ -9,9 +9,9 @@ parameters:
     type: string
     default: $CIRCLE_BRANCH
     description: "Branch where to commit to"
-  folder:
+  file:
     type: string
-    description: "Folder to commit"
+    description: "File to commit"
   commit-message:
     type: string
     description: "Message to use"
@@ -45,11 +45,12 @@ steps:
         token=$(cat $SECRET_ACCESS_TOKEN_FILE_PATH) 
 
         # Store the absolute path of the target folder
-        TARGET_FOLDER=$(realpath "<< parameters.folder >>")
+        TARGET_FILE=$(realpath "<< parameters.file >>")
+        TARGET_DIR=$(dirname "${TARGET_FILE}")
 
         # Check if the target folder is within a git repository
-        if ! git -C "${TARGET_FOLDER}" rev-parse --git-dir > /dev/null 2>&1; then
-          echo "Error: The specified folder '${TARGET_FOLDER}' is not within a git repository."
+        if ! git -C "${TARGET_DIR}" rev-parse --git-dir > /dev/null 2>&1; then
+          echo "Error: The specified file '${TARGET_FILE}' is not within a git repository."
           exit 1
         fi
 
@@ -96,7 +97,7 @@ steps:
         git stash pop
 
         # Stage only the files from the target folder
-        git add "${TARGET_FOLDER}"
+        git add "${TARGET_FILE}"
 
         # Create commit if there are changes
         if git diff --staged --quiet; then
