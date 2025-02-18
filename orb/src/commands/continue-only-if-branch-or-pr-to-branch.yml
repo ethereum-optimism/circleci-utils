@@ -37,6 +37,7 @@ steps:
             if [ -z "$CI_PULL_REQUEST" ]; then
                 echo "This is not a branch, skipping"
                 circleci-agent step halt
+                exit 0
             fi
 
             
@@ -51,6 +52,7 @@ steps:
             if [ "$CIRCLE_CI_TARGET_BRANCH" != "<< parameters.branch >>" ]; then
                 echo "PR Target Branch:$CIRCLE_CI_TARGET_BRANCH is not the same as the << parameters.branch >> branch"
                 circleci-agent step halt
+                exit 0
             fi
 
         fi
