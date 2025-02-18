@@ -1,0 +1,58 @@
+description: >
+  This command is used to make a job only execute if the current branch or the PR target branch is the one in the parameters
+parameters:
+  branch:
+    type: string
+    description: "name of the branch to verify"
+  token-name:
+    type: env_var_name
+    description: "name of the token to use"
+    default: "GITHUB_TOKEN_GOVERNANCE"
+  condition:
+    type: string
+    default: "always"
+    description: "The condition to run the command. 0 and always are considered true, everything else is false"
+steps:
+  - run:
+      name: Continue if PR Target Branch is the same as the current branch
+      command: |
+        if [ "<< parameters.condition >>" != "always" ] && [ "<< parameters.condition >>" != "0" ] && [ "<< parameters.condition >>" != "true" ]; then
+          echo "Skipping command because condition (<< parameters.condition >>) is not met"
+          exit 0
+        fi
+
+        # if token-name is not set, we use the default one
+        if [ -z "${<< parameters.token-name >>}" ]; then
+            echo "Token name is not set, exiting"
+            exit 1
+        fi 
+
+        token=${<< parameters.token-name >>}
+
+        # if branch is the one in the parameters, we continue
+        if [ "$CIRCLE_CI_BRANCH" == "<< parameters.branch >>" ]; then
+            echo "Branch is the one in the parameters, continuing"
+        else
+            # if not a branch exit
+            if [ -z "$CI_PULL_REQUEST" ]; then
+                echo "This is not a branch, skipping"
+                circleci-agent step halt
+            fi
+
+            
+            API_URL=$(echo "${CI_PULL_REQUEST}" | sed 's|github.com|api.github.com/repos|' | sed 's|pull|pulls|')
+            RESPONSE=$(curl -sL -H "Accept: application/vnd.github.v3+json" -H "Authorization: Bearer ${token}" "${API_URL}")
+            CIRCLE_CI_TARGET_BRANCH=$(echo "$RESPONSE" | jq -r '.base.ref')
+
+            echo "Target branch is: $CIRCLE_CI_TARGET_BRANCH"
+            echo "export CIRCLECI_TARGET_BRANCH=${CIRCLE_CI_TARGET_BRANCH}" >> $BASH_ENV
+
+            # if the target branch is not the same as the current branch, exit with a message
+            if [ "$CIRCLE_CI_TARGET_BRANCH" != "<< parameters.branch >>" ]; then
+                echo "PR Target Branch:$CIRCLE_CI_TARGET_BRANCH is not the same as the << parameters.branch >> branch"
+                circleci-agent step halt
+            fi
+
+        fi
+
+    #
