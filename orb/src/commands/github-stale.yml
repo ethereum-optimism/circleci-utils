@@ -1,0 +1,63 @@
+description: >
+  This command will check for stale issues and pull requests and mark them as stale if they are, and close them if they are stale for more than x days
+parameters:
+  repo:
+    type: string
+    default: $CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
+  stale-issue-message:
+    type: string
+    default: 'This issue has been automatically marked as stale and will be closed in 7 days if no updates'
+  stale-pr-message:
+    type: string
+    default: 'This pr has been automatically marked as stale and will be closed in 7 days if no updates'
+  close-issue-message:
+    type: string
+    default: 'This issue was closed as stale.  Please reopen if this is a mistake'
+  close-pr-message:
+    type: string
+    default: 'This PR was closed as stale.  Please reopen if this is a mistake'
+  days-before-issue-stale:
+    type: integer
+    default: 7
+  days-before-pr-stale:
+    type: integer
+    default: 7
+  days-before-issue-close:
+    type: integer
+    default: 7
+  days-before-pr-close:
+    type: integer
+    default: 7
+  condition:
+    type: string
+    default: "always"
+    description: "The condition to run the command. 0 and always are considered true, everything else is false"
+steps:
+  - setup-circleci-utils-and-github-token
+  - run:
+      name: Get PR Comments
+      command: |
+        if [ "<< parameters.condition >>" != "always" ] && [ "<< parameters.condition >>" != "0" ] && [ "<< parameters.condition >>" != "true" ]; then
+          echo "Skipping command because condition (<< parameters.condition >>) is not met"
+          exit 0
+        fi
+
+        token=$(cat $SECRET_ACCESS_TOKEN_FILE_PATH)
+        
+        # Process stale issues
+        python $CIRCLECI_TOOLS_PATH process-stale-issues \
+          --github-token "$token" \
+          --repo "<< parameters.repo >>" \
+          --days-before-stale "<< parameters.days-before-issue-stale >>" \
+          --days-before-close "<< parameters.days-before-issue-close >>"
+
+        # Process stale PRs
+        python $CIRCLECI_TOOLS_PATH process-stale-prs \
+          --github-token "$token" \
+          --repo "<< parameters.repo >>" \
+          --stale-pr-message "<< parameters.stale-pr-message >>" \
+          --days-before-stale "<< parameters.days-before-pr-stale >>" \
+          --days-before-close "<< parameters.days-before-pr-close >>"
+
+
+
