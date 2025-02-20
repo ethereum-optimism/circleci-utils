@@ -1,0 +1,48 @@
+    description: "Get the webhook payload on file payload.json"
+    parameters:
+      webhook_body:
+        type: string
+        description: "The webhook body to process"
+      webhook_file:
+        type: string
+        description: "The output file path"
+        default: "payload.json"
+    steps:
+      - gh/install
+      - run:
+          name: Install dependencies
+          command: |
+            pip3 install requests urllib3
+      - run:
+          name: Process Webhook Payload
+          environment:
+            webhook_body: << parameters.webhook_body >>
+            # This is the webhook, contains also the webhook_secret, shall not be exposed. 
+            # Add the secret to the security context to make sure this is hidden. 
+            # Make sure this is add without the final =, as the secret we receive is url encoded and '=' will be '%3D'
+            webhook_file: << parameters.webhook_file >>
+          command: |
+            python3 \<< EOF
+            import json
+            import urllib.parse
+            import os
+            from pprint import pprint
+
+            try:
+                # Get the webhook payload from CircleCI parameters
+                webhook_body = os.environ['webhook_body']
+            except:
+                print("No webhook body found")
+                exit(0)
+            try:
+                # Parse the URL-encoded payload
+                parsed = urllib.parse.parse_qs(webhook_body)
+                payload = json.loads(parsed['payload'][0])
+                
+                # Write to BASH_ENV file
+                with open('payload.json', 'w') as payload_file:
+                    payload_file.write(json.dumps(payload))
+            except:
+                print("Error parsing webhook body")
+                exit(0)
+            EOF
