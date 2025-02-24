@@ -31,6 +31,7 @@
             try:
                 # Get the webhook payload from CircleCI parameters
                 webhook_body = os.environ['webhook_body']
+                webhook_file = os.environ['webhook_file']
             except:
                 print("No webhook body found")
                 exit(0)
@@ -40,7 +41,7 @@
                 payload = json.loads(parsed['payload'][0])
                 
                 # Write to BASH_ENV file
-                with open('payload.json', 'w') as payload_file:
+                with open(webhook_file, 'w') as payload_file:
                     payload_file.write(json.dumps(payload))
             except:
                 print("Error parsing webhook body")
