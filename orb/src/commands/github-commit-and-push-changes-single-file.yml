@@ -93,8 +93,8 @@ steps:
           git checkout -b "<< parameters.branch >>" HEAD
         fi
 
-        # Reapply the stashed changes
-        git stash pop
+        # Reapply the stashed changes only if something was stashed
+        git stash pop || true
 
         # Stage only the files from the target folder
         git add "${TARGET_FILE}"
