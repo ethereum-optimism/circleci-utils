@@ -1,10 +1,18 @@
 description: >
   Checkout then initialize the mise environment.
+parameters:
+  checkout-branch:
+    type: string
+    default: "$CIRCLE_BRANCH"
 steps:
   - checkout
   - run:
       name: Initialize mise environment
       command: |
+        if [[ "$checkout-branch" != "$CIRCLE_BRANCH" ]]; then
+          git checkout "$checkout-branch"
+        fi
+
         # This is used to create a per-user cache key to preserve permissions across different
         # executor types.
         user=$(whoami)
