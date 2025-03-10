@@ -50,7 +50,7 @@ steps:
         if command -v mise &> /dev/null; then
           echo "mise already installed at $(command -v mise)"
         else
-          curl https://mise.run | sh
+          sh <<include(scripts/install_mise.sh)>>
         fi
 
         echo "export PATH=\"$HOME/.local/bin:\$PATH\"" >> "$BASH_ENV"
