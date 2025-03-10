@@ -46,13 +46,10 @@ steps:
         - mise-v5-{{ checksum ".executor-user" }}-{{ checksum "mise.toml" }}
   - run:
       name: Install mise
+      command: <<include(scripts/install_mise.sh)>>
+  - run:
+      name: Configure mise environment
       command: |
-        if command -v mise &> /dev/null; then
-          echo "mise already installed at $(command -v mise)"
-        else
-          sh <<include(scripts/install_mise.sh)>>
-        fi
-
         echo "export PATH=\"$HOME/.local/bin:\$PATH\"" >> "$BASH_ENV"
         echo "export MISE_DATA_DIR=/data/mise-data" >> "$BASH_ENV"
         echo "export MISE_JOBS=$(nproc)" >> "$BASH_ENV"
