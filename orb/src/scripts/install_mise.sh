@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+if command -v mise; then
+    echo "mise already installed at $(command -v mise)"
+    exit 0
+fi
+
 #region logging setup
 if [ "${MISE_DEBUG-}" = "true" ] || [ "${MISE_DEBUG-}" = "1" ]; then
   debug() {
