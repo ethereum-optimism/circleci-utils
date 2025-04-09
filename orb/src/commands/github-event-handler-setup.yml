@@ -1,0 +1,39 @@
+description: "Create environment variables from the GitHub event"
+parameters:
+  env_prefix:
+    type: string
+    default: "github_"
+    description: "The prefix for the environment variables"
+  github_event_base64:
+    type: string
+    description: "The base64 encoded GitHub event"
+steps:
+  - run:
+      name: Create environment variables from JSON
+      shell: /bin/sh
+      command: |
+        # Decode and validate the base64 input
+        GITHUB_EVENT_JSON=$(echo "$github_event_base64" | base64 --decode 2>/dev/null)
+        echo "$GITHUB_EVENT_JSON" | jq -e . >/dev/null || {
+          echo "Invalid JSON payload."
+          exit 1
+        }
+
+        # Safe escaping function
+        escape_for_shell() {
+          printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+        }
+
+        # Export full JSON as a single safe variable
+        ESCAPED_JSON=$(escape_for_shell "$GITHUB_EVENT_JSON")
+        echo "export ${env_prefix}json_event=$ESCAPED_JSON" >> "$BASH_ENV"
+
+        # Export each field safely
+        echo "$GITHUB_EVENT_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' | while IFS='=' read -r key value; do
+          [ -z "$key" ] && continue
+          escaped_value=$(escape_for_shell "$value")
+          echo "export ${env_prefix}${key}=$escaped_value" >> "$BASH_ENV"
+        done
+      environment:
+        env_prefix: << parameters.env_prefix >>
+        github_event_base64: << parameters.github_event_base64 >>
