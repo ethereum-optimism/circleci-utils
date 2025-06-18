@@ -54,6 +54,9 @@ steps:
         echo "export MISE_DATA_DIR=/data/mise-data" >> "$BASH_ENV"
         echo "export MISE_JOBS=$(nproc)" >> "$BASH_ENV"
         echo "eval \"\$($HOME/.local/bin/mise activate --shims)\"" >> "$BASH_ENV"
+        # install rust artifacts where they'll be cached
+        echo "export MISE_CARGO_HOME=\${MISE_DATA_DIR}/.cargo" >> "$BASH_ENV"
+        echo "export MISE_RUSTUP_HOME=\${MISE_DATA_DIR}/.rustup" >> "$BASH_ENV"
   - run:
       name: Install mise deps
       command: |
