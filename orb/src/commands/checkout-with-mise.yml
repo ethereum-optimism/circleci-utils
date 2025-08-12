@@ -16,7 +16,6 @@ steps:
         - run:
             name: Initialize and Update Submodules
             command: |
-              git submodule sync --recursive
               git submodule update --init --recursive --depth 1
   - run:
       name: Initialize mise environment
