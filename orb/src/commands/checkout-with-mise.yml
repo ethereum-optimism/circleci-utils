@@ -4,8 +4,19 @@ parameters:
   checkout-branch:
     type: string
     default: "$CIRCLE_BRANCH"
+  submodules:
+    type: boolean
+    default: false
+    description: Whether to initialize and update git submodules recursively
 steps:
   - checkout
+  - when:
+      condition: << parameters.submodules >>
+      steps:
+        - run:
+            name: Initialize and Update Submodules
+            command: |
+              git submodule update --init --recursive --depth 1
   - run:
       name: Initialize mise environment
       command: |
