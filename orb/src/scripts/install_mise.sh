@@ -243,6 +243,12 @@ install_mise() {
   arch="$(get_arch)"
   ext="$(get_ext)"
   install_path="${MISE_INSTALL_PATH:-$HOME/.local/bin/mise}"
+
+  if [ -x "$install_path" ]; then
+    debug "mise-setup: already installed"
+    exit 0
+  fi
+
   install_dir="$(dirname "$install_path")"
   tarball_url="https://github.com/jdx/mise/releases/download/v${version}/mise-v${version}-${os}-${arch}.${ext}"
 

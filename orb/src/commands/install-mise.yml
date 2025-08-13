@@ -1,0 +1,71 @@
+description: >
+  Initialize the mise environment.
+parameters:
+  mise_config:
+    type: string
+    default: "mise.toml"
+steps:
+  - run:
+      name: Initialize mise environment
+      command: |
+        # This is used to create a per-user cache key to preserve permissions across different
+        # executor types.
+        user=$(whoami)
+        echo "$user" > .executor-user
+        echo "Set executor user to $user."
+        
+        # Ensure that all of the required directories exist and are empty.
+        curdir="$(pwd)/../"
+        workdir="$(realpath $curdir)"
+        mkdir -p "$HOME/.local/bin"
+        sudo rm -rf /data/mise-data
+        sudo rm -rf /var/opt/circleci/data/mise-data
+        sudo rm -rf "$workdir/mise-data"
+        sudo mkdir -p /data/mise-data
+        sudo chown -R "$user:$user" /data/mise-data
+        echo "Created directories."
+  - restore_cache:
+      name: Restore mise cache
+      keys:
+        - mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
+  - run:
+      name: Move cached mise
+      command: |
+        if [ -x "/tmp/cached-mise" ]; then
+          echo "Cached mise found, moving to $HOME/.local/bin/mise."
+          mv /tmp/cached-mise "$HOME/.local/bin/mise"
+        else
+          echo "Cached mise not found."
+        fi
+  - run:
+      name: Install mise
+      command: <<include(scripts/install_mise.sh)>>
+  - run:
+      name: Copy mise for cache
+      command: |
+        cp "$HOME/.local/bin/mise" /tmp/cached-mise
+  - run:
+      name: Configure mise environment
+      command: |
+        echo "export PATH=\"$HOME/.local/bin:\$PATH\"" >> "$BASH_ENV"
+        echo "export MISE_DATA_DIR=/data/mise-data" >> "$BASH_ENV"
+        echo "export MISE_JOBS=$(nproc)" >> "$BASH_ENV"
+        echo "eval \"\$($HOME/.local/bin/mise activate --shims)\"" >> "$BASH_ENV"
+        # install rust artifacts where they'll be cached
+        echo "export MISE_CARGO_HOME=\${MISE_DATA_DIR}/.cargo" >> "$BASH_ENV"
+        echo "export MISE_RUSTUP_HOME=\${MISE_DATA_DIR}/.rustup" >> "$BASH_ENV"
+  - run:
+      name: Install mise deps
+      command: |
+        # Install mise data to a common location between each executor type.
+        mise install -v -y
+  - save_cache:
+      name: Save mise cache
+      key: mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
+      paths:
+        - /data/mise-data
+        - /tmp/cached-mise
+  - run:
+      name: Delete executor file
+      command: |
+        rm -f .executor-user
