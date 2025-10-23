@@ -4,6 +4,13 @@ parameters:
   checkout-branch:
     type: string
     default: "$CIRCLE_BRANCH"
+  checkout-method:
+    type: enum
+    enum:
+      - blobless
+      - full
+    default: full
 steps:
-  - checkout
+  - checkout:
+      method: << parameters.checkout-method >>
   - install-mise
