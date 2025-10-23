@@ -1,9 +1,6 @@
 description: >
   Checkout then initialize the mise environment.
 parameters:
-  checkout-branch:
-    type: string
-    default: "$CIRCLE_BRANCH"
   checkout-method:
     type: enum
     enum:
