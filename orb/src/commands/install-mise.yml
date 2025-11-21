@@ -39,6 +39,8 @@ steps:
         fi
   - run:
       name: Install mise
+      max_auto_reruns: 3  # allow 3 retries in case of transient errors
+      auto_rerun_delay: 3s
       command: <<include(scripts/install_mise.sh)>>
   - run:
       name: Copy mise for cache
