@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 FILE_PATH=$(dirname $0)
 cd $FILE_PATH/src
@@ -15,5 +15,7 @@ fi
 rm -f orb.yml
 circleci orb pack ./ > orb.yml
 
-circleci orb publish orb.yml ethereum-optimism/circleci-utils@dev:first
+# Get current branch name and sanitize it for use in orb version
+BRANCH_NAME=$(git branch --show-current | sed 's/\//-/g')
+circleci orb publish orb.yml ethereum-optimism/circleci-utils@dev:$BRANCH_NAME
 
