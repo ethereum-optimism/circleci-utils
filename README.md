@@ -144,7 +144,13 @@ Once your dev version has been tested and approved, you can promote it to produc
    ```bash
    cd orb
    ```
-3. Run the publish-prod script:
+3. **(Optional)** Run a dry-run first to see what will happen:
+   ```bash
+   ./publish-prod.sh --dry-run
+   ```
+   This will simulate the entire process without making any changes.
+
+4. Run the publish-prod script:
    ```bash
    ./publish-prod.sh
    ```
@@ -153,6 +159,9 @@ The script will:
 - Validate the orb configuration
 - Prompt you to enter the **branch name** (dev version label) to promote
   - Example: If you published `dev:feat-my-branch`, enter `feat-my-branch`
+- **Show a diff** between the current production version and the dev version
+  - This helps you review exactly what changes will be promoted
+  - **If no differences are found, the script will exit** (nothing to promote)
 - Ask for confirmation before promoting
 - Promote the dev version to production with a **patch** version increment
 - Optionally tag the repository (see next section)
@@ -202,8 +211,15 @@ This keeps the repository tags synchronized with the orb versions.
 - **Purpose:** Promote a tested dev version to production
 - **Who can run:** GitHub organization owners/admins only (or ask #eng-oncall in Slack)
 - **Branch:** Any branch (typically `main`)
-- **Actions:** Promotes dev to production (patch version) and optionally tags repository
+- **Actions:** 
+  - Shows diff between production and dev version
+  - Promotes dev to production (patch version)
+  - Optionally tags repository
 - **Permissions needed:** GitHub org Owner/Admin role
+- **Dry-run mode:** Use `--dry-run` or `-n` flag to simulate without making changes
+  ```bash
+  ./publish-prod.sh --dry-run
+  ```
 
 ### `publish-prod-repository-tag.sh`
 - **Purpose:** Tag the repository with the latest orb version
@@ -230,6 +246,7 @@ This keeps the repository tags synchronized with the orb versions.
    ↓
 6. Run ./publish-prod.sh from main (requires org owner or ask #eng-oncall)
    → Enter branch name: feat-my-branch
+   → Review diff between production and dev
    → Confirm promotion
    → Optionally tag repository
    ↓
@@ -241,11 +258,14 @@ This keeps the repository tags synchronized with the orb versions.
 
 1. **Always test dev versions** before promoting to production
 2. **Use descriptive branch names** - they become part of the dev version identifier
-3. **Promote from main** - Ensure your changes are merged to main before promoting
-4. **Tag the repository** - Keep repository tags in sync with orb versions for traceability
-5. **Document breaking changes** - If your changes break existing functionality, communicate this to users
-6. **Plan ahead for production releases** - If you're not a GitHub org owner, coordinate with #eng-oncall in Slack before you need to publish
-7. **Test thoroughly** - Since only owners can publish production, make sure your dev version is thoroughly tested to avoid multiple release cycles
+3. **Use dry-run mode first** - Run `./publish-prod.sh --dry-run` to verify what will happen before actual promotion
+4. **Review the diff** - The script shows changes between production and dev; review them carefully before confirming
+   - The script will automatically exit if no changes are detected
+5. **Promote from main** - Ensure your changes are merged to main before promoting
+6. **Tag the repository** - Keep repository tags in sync with orb versions for traceability
+7. **Document breaking changes** - If your changes break existing functionality, communicate this to users
+8. **Plan ahead for production releases** - If you're not a GitHub org owner, coordinate with #eng-oncall in Slack before you need to publish
+9. **Test thoroughly** - Since only owners can publish production, make sure your dev version is thoroughly tested to avoid multiple release cycles
 
 ## Troubleshooting
 
@@ -274,6 +294,22 @@ This keeps the repository tags synchronized with the orb versions.
 - Check that the branch name was sanitized correctly (slashes become hyphens)
 - Verify you're using the correct namespace: `ethereum-optimism/circleci-utils`
 
+### "No differences found between production and dev version"
+- This means your dev version is identical to the current production version
+- The script will exit automatically since there's nothing to promote
+- Make sure you:
+  - Published your changes to the dev version using `./publish-dev.sh`
+  - Are using the correct branch name when prompted
+  - Actually made changes to the orb source files
+
+### Diff output is hard to read
+- Install `colordiff` for colored diff output (optional):
+  ```bash
+  brew install colordiff  # macOS
+  apt-get install colordiff  # Linux
+  ```
+- The script will automatically use `colordiff` if available
+
 ## Additional Resources
 
 - [CircleCI Orbs Documentation](https://circleci.com/docs/orb-intro/)
@@ -291,6 +327,9 @@ This keeps the repository tags synchronized with the orb versions.
 
 **Want to test changes?**
 → Run `./publish-dev.sh` (any org member can do this)
+
+**Preview what promotion will do?**
+→ Run `./publish-prod.sh --dry-run` to simulate without changes
 
 **Check available versions:**
 ```bash
