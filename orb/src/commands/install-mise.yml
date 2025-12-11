@@ -4,6 +4,15 @@ parameters:
   mise_config:
     type: string
     default: "mise.toml"
+  enable_mise_cache:
+    type: boolean
+    default: false
+  mise_cache_key_prefix:
+    type: string
+    default: "mise-cache"
+  mise_cache_checksum:
+    type: string
+    default: '{{ checksum "mise.toml" }}'
 steps:
   - run:
       name: Initialize mise environment
@@ -56,11 +65,50 @@ steps:
         # install rust artifacts where they'll be cached
         echo "export MISE_CARGO_HOME=\${MISE_DATA_DIR}/.cargo" >> "$BASH_ENV"
         echo "export MISE_RUSTUP_HOME=\${MISE_DATA_DIR}/.rustup" >> "$BASH_ENV"
+  - when:
+      condition: << parameters.enable_mise_cache >>
+      steps:
+        - restore_cache:
+            name: Restore mise/ubi install cache
+            keys:
+              - << parameters.mise_cache_key_prefix >>-{{ checksum ".executor-user" }}-<< parameters.mise_cache_checksum >>
+              - << parameters.mise_cache_key_prefix >>-{{ checksum ".executor-user" }}
   - run:
-      name: Install mise deps
+      name: Install mise deps (with retry)
       command: |
         # Install mise data to a common location between each executor type.
-        mise install -v -y
+        set -euo pipefail
+
+        backoffs="0 15 45 90"
+        attempt=1
+        for delay in $backoffs; do
+          if [ "$delay" -gt 0 ]; then
+            echo "Retry ${attempt}: sleeping ${delay}s before running mise install -y..."
+            sleep "$delay"
+          fi
+
+          if mise install -v -y; then
+            echo "mise install completed successfully on attempt ${attempt}."
+            exit 0
+          fi
+
+          status=$?
+          echo "mise install failed with exit code ${status} on attempt ${attempt}."
+          attempt=$((attempt + 1))
+        done
+
+        echo "mise install failed after $((attempt - 1)) attempts (backoffs: ${backoffs})."
+        exit 1
+  - when:
+      condition: << parameters.enable_mise_cache >>
+      steps:
+        - save_cache:
+            name: Save mise/ubi install cache
+            key: << parameters.mise_cache_key_prefix >>-{{ checksum ".executor-user" }}-<< parameters.mise_cache_checksum >>
+            paths:
+              - ~/.local/share/mise
+              - ~/.cache/mise
+              - ~/.cache/ubi
   - save_cache:
       name: Save mise cache
       key: mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}

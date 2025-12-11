@@ -267,6 +267,22 @@ This keeps the repository tags synchronized with the orb versions.
 8. **Plan ahead for production releases** - If you're not a GitHub org owner, coordinate with #eng-oncall in Slack before you need to publish
 9. **Test thoroughly** - Since only owners can publish production, make sure your dev version is thoroughly tested to avoid multiple release cycles
 
+## checkout-with-mise cache + retry
+
+- Optional caching around `mise install -y`/ubi (set `enable-mise-cache: true`) saves/restores `~/.local/share/mise`, `~/.cache/mise`, `~/.cache/ubi`.
+- Cache key params: `mise-cache-key-prefix` (default `mise-cache`) and `mise-cache-checksum` (default `{{ checksum "mise.toml" }}`; set to any checksum expression or value to combine multiple configs or break the cache).
+- Install step retries with backoff (0s, 15s, 45s, 90s) to ride out GitHub 403 rate limits before failing.
+- Defaults keep previous behavior; enable caching explicitly per job.
+
+Example:
+```yaml
+- utils/checkout-with-mise:
+    checkout-method: full
+    enable-mise-cache: true
+    mise-cache-key-prefix: op-mise
+    mise-cache-checksum: '{{ checksum "config/mise.toml" }}'
+```
+
 ## Troubleshooting
 
 ### "User does not have access to publish SemVer orbs in this namespace"
