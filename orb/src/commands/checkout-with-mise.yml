@@ -7,7 +7,19 @@ parameters:
       - blobless
       - full
     default: full
+  enable-mise-cache:
+    type: boolean
+    default: false
+  mise-cache-key-prefix:
+    type: string
+    default: "mise-cache"
+  mise-cache-checksum:
+    type: string
+    default: '{{ checksum "mise.toml" }}'
 steps:
   - checkout:
       method: << parameters.checkout-method >>
-  - install-mise
+  - install-mise:
+      enable_mise_cache: << parameters.enable-mise-cache >>
+      mise_cache_key_prefix: << parameters.mise-cache-key-prefix >>
+      mise_cache_checksum: << parameters.mise-cache-checksum >>
