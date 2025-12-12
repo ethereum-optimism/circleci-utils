@@ -75,14 +75,15 @@ else
             echo "Legend: '-' = removed from production, '+' = added in dev"
             echo ""
             
-            # Show the diff
+            # Show the diff and capture if there are differences
             if command -v colordiff > /dev/null 2>&1; then
                 diff -u "$TEMP_DIR/prod.yml" "$TEMP_DIR/dev.yml" | colordiff | tail -n +3
+                DIFF_EXIT=${PIPESTATUS[0]}
             else
                 diff -u "$TEMP_DIR/prod.yml" "$TEMP_DIR/dev.yml" | tail -n +3
+                DIFF_EXIT=${PIPESTATUS[0]}
             fi
             
-            DIFF_EXIT=$?
             echo ""
             
             if [ $DIFF_EXIT -eq 0 ]; then
@@ -185,8 +186,9 @@ if [[ -z $REPLY || $REPLY =~ ^[Yy]$ ]]; then
         fi
     else
         # Get the directory of this script to call the tagging script
-        SCRIPT_DIR=$(dirname $0)
-        $SCRIPT_DIR/publish-prod-repository-tag.sh
+        # Use FILE_PATH since we already changed directory earlier
+        cd "$FILE_PATH"
+        ./publish-prod-repository-tag.sh
     fi
 else
     echo "$([ "$DRY_RUN" = true ] && echo "Would skip" || echo "Skipping") repository tagging"
