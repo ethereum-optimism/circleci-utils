@@ -1,0 +1,74 @@
+description: >
+  "Verify all required jobs passed by checking ci-gate's dependencies via the CircleCI API."
+parameters:
+  circleci-api-token:
+    type: env_var_name
+    description: "Name of the environment variable holding the CircleCI API token"
+    default: CIRCLECI_API_TOKEN
+steps:
+  - run:
+      name: Verify all required jobs passed
+      command: |
+        set -euo pipefail
+
+        if [ -z "${<< parameters.circleci-api-token >>}" ]; then
+          echo "ERROR: << parameters.circleci-api-token >> is not set"
+          exit 1
+        fi
+
+        # Fetch all jobs across all pages.
+        fetch_all_jobs() {
+          local base="https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job"
+          local token="${<< parameters.circleci-api-token >>}"
+          local next_token=""
+          local all_items="[]"
+
+          while true; do
+            local url="$base"
+            if [ -n "$next_token" ]; then
+              url="$base?page-token=$next_token"
+            fi
+
+            local page
+            page=$(curl -sf -H "Circle-Token: $token" "$url")
+
+            all_items=$(echo "$all_items $page" | jq -s '.[0] + .[1].items')
+            next_token=$(echo "$page" | jq -r '.next_page_token // empty')
+
+            if [ -z "$next_token" ]; then
+              break
+            fi
+          done
+
+          echo "$all_items"
+        }
+
+        JOBS=$(fetch_all_jobs)
+
+        # Derive required jobs from ci-gate's own dependencies field in the API response.
+        # The requires list in the workflow is the single source of truth.
+        DEP_IDS=$(echo "$JOBS" | jq -r '.[] | select(.name == "ci-gate") | .dependencies[]')
+
+        if [ -z "$DEP_IDS" ]; then
+          echo "ERROR: no dependency IDs found — possible API failure or ci-gate not found in workflow"
+          exit 1
+        fi
+
+        echo "Checking required jobs for ci-gate..."
+        ALL_PASSED=true
+        for dep_id in $DEP_IDS; do
+          NAME=$(echo "$JOBS" | jq -r --arg id "$dep_id" '.[] | select(.id == $id) | .name')
+          STATUS=$(echo "$JOBS" | jq -r --arg id "$dep_id" '.[] | select(.id == $id) | .status')
+          if [ "$STATUS" = "success" ]; then
+            echo "  ok $NAME: $STATUS"
+          else
+            echo "  FAIL $NAME: $STATUS"
+            ALL_PASSED=false
+          fi
+        done
+
+        if [ "$ALL_PASSED" = "false" ]; then
+          echo "Some required jobs did not pass."
+          exit 1
+        fi
+        echo "All required jobs passed."

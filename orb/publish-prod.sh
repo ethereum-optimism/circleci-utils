@@ -10,7 +10,7 @@ if [ "$1" == "--dry-run" ] || [ "$1" == "-n" ]; then
     echo ""
 fi
 
-FILE_PATH=$(dirname $0)
+FILE_PATH=$(cd "$(dirname "$0")" && pwd)
 cd $FILE_PATH/src
 
 #check if orb.yml is valid
