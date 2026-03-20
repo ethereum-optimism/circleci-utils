@@ -4,14 +4,14 @@ parameters:
   circleci-api-token:
     type: env_var_name
     description: "Name of the environment variable holding the CircleCI API token"
-    default: CIRCLECI_API_TOKEN
+    default: "CIRCLE_API_TOKEN"
 steps:
   - run:
       name: Verify all required jobs passed
       command: |
         set -euo pipefail
 
-        if [ -z "${<< parameters.circleci-api-token >>}" ]; then
+        if [ -z "${<< parameters.circleci-api-token >>:-}" ]; then
           echo "ERROR: << parameters.circleci-api-token >> is not set"
           exit 1
         fi
