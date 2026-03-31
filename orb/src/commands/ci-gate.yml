@@ -1,15 +1,26 @@
 description: >
-  "Verify all required jobs passed by checking ci-gate's dependencies via the CircleCI API."
+  Verify all required jobs passed by checking ci-gate's dependencies via the CircleCI API.
+  With always-succeed, the check is skipped and the step exits successfully.
 parameters:
   circleci-api-token:
     type: env_var_name
     description: "Name of the environment variable holding the CircleCI API token"
     default: "CIRCLE_API_TOKEN"
+  always-succeed:
+    type: boolean
+    default: false
+    description: >
+      When true, skip the dependency check and exit successfully (no API token required).
 steps:
   - run:
       name: Verify all required jobs passed
       command: |
         set -euo pipefail
+
+        if [ "<< parameters.always-succeed >>" = "true" ]; then
+          echo "Skipping ci-gate: always-succeed is true."
+          exit 0
+        fi
 
         if [ -z "${<< parameters.circleci-api-token >>:-}" ]; then
           echo "ERROR: << parameters.circleci-api-token >> is not set"
