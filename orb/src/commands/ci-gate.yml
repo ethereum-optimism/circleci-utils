@@ -1,6 +1,6 @@
 description: >
-  Verify all required jobs passed by checking ci-gate's dependencies via the CircleCI API.
-  With always-succeed, the check is skipped and the step exits successfully.
+  Verify all required jobs passed by checking this job's workflow dependencies via the CircleCI API
+  (matches $CIRCLE_JOB, e.g. ci-gate or required-contracts-ci). With always-succeed, the check is skipped.
 parameters:
   circleci-api-token:
     type: env_var_name
@@ -56,16 +56,21 @@ steps:
 
         JOBS=$(fetch_all_jobs)
 
-        # Derive required jobs from ci-gate's own dependencies field in the API response.
-        # The requires list in the workflow is the single source of truth.
-        DEP_IDS=$(echo "$JOBS" | jq -r '.[] | select(.name == "ci-gate") | .dependencies[]')
+        # Derive required jobs from this job's dependencies in the API response.
+        # The name must match $CIRCLE_JOB (e.g. ci-gate on main, required-contracts-ci on contracts workflows).
+        GATE_NAME="${CIRCLE_JOB:-}"
+        if [ -z "$GATE_NAME" ]; then
+          echo "ERROR: CIRCLE_JOB is not set"
+          exit 1
+        fi
+        DEP_IDS=$(echo "$JOBS" | jq -r --arg name "$GATE_NAME" '.[] | select(.name == $name) | .dependencies[]')
 
         if [ -z "$DEP_IDS" ]; then
-          echo "ERROR: no dependency IDs found — possible API failure or ci-gate not found in workflow"
+          echo "ERROR: no dependency IDs found — possible API failure or gate job \"$GATE_NAME\" not found in workflow"
           exit 1
         fi
 
-        echo "Checking required jobs for ci-gate..."
+        echo "Checking required jobs for $GATE_NAME..."
         ALL_PASSED=true
         for dep_id in $DEP_IDS; do
           NAME=$(echo "$JOBS" | jq -r --arg id "$dep_id" '.[] | select(.id == $id) | .name')
