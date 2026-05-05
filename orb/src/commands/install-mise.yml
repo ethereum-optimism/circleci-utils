@@ -36,7 +36,7 @@ steps:
   - restore_cache:
       name: Restore mise cache
       keys:
-        - mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
+        - mise-v2026-5-0-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
   - run:
       name: Move cached mise
       command: |
@@ -111,7 +111,7 @@ steps:
               - ~/.cache/ubi
   - save_cache:
       name: Save mise cache
-      key: mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
+      key: mise-v2026-5-0-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
       paths:
         - /data/mise-data
         - /tmp/cached-mise
