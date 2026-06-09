@@ -1,0 +1,48 @@
+description: >
+  Checkout the current CircleCI SHA over HTTPS with retries.
+parameters:
+  checkout-method:
+    type: enum
+    enum:
+      - blobless
+      - full
+    default: full
+steps:
+  - run:
+      name: Checkout code
+      command: |
+        set -euo pipefail
+
+        repo="${CIRCLE_REPOSITORY_URL:-https://github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}.git}"
+        case "$repo" in
+          git@github.com:*) repo="https://github.com/${repo#git@github.com:}" ;;
+          ssh://git@github.com/*) repo="https://github.com/${repo#ssh://git@github.com/}" ;;
+        esac
+
+        fetch_filter=""
+        if [ "<< parameters.checkout-method >>" = "blobless" ]; then
+          fetch_filter="--filter=blob:none"
+        fi
+
+        git init .
+        git remote add origin "$repo"
+
+        fetched=false
+        for attempt in 1 2 3; do
+          if git fetch --no-tags $fetch_filter origin "$CIRCLE_SHA1"; then
+            fetched=true
+            break
+          fi
+
+          delay=$((attempt * 5))
+          echo "git fetch failed on attempt ${attempt}; retrying in ${delay}s..."
+          sleep "$delay"
+        done
+
+        if [ "$fetched" != "true" ]; then
+          echo "git fetch failed after 3 attempts."
+          exit 1
+        fi
+
+        git checkout --detach "$CIRCLE_SHA1"
+        test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1"

@@ -17,8 +17,8 @@ parameters:
     type: string
     default: '{{ checksum "mise.toml" }}'
 steps:
-  - checkout:
-      method: << parameters.checkout-method >>
+  - checkout-code:
+      checkout-method: << parameters.checkout-method >>
   - install-mise:
       enable_mise_cache: << parameters.enable-mise-cache >>
       mise_cache_key_prefix: << parameters.mise-cache-key-prefix >>
