@@ -1,5 +1,9 @@
 description: >
-  This command commit and push a file change to a specific repo/branch
+  This command commits and pushes a file change to a specific repo/branch.
+  The file's current content is treated as authoritative: it overwrites
+  whatever the target branch has (no merge is attempted). Any manual commits
+  made directly to the target branch's copy of the file will be overwritten
+  by the next run — such changes belong on the branch this command runs from.
 parameters:
   repo:
     type: string
@@ -42,7 +46,7 @@ steps:
           exit 0
         fi
 
-        token=$(cat $SECRET_ACCESS_TOKEN_FILE_PATH) 
+        token=$(cat "$SECRET_ACCESS_TOKEN_FILE_PATH")
 
         # Store the absolute path of the target folder
         TARGET_FILE=$(realpath "<< parameters.file >>")
@@ -63,7 +67,7 @@ steps:
 
         if [ -z "<< parameters.commit-email >>" ]; then
           # Extract the email from the user info
-          ID=$(curl https://api.github.com/users/$USERNAME | jq -r '.id')
+          ID=$(curl "https://api.github.com/users/${USERNAME}" | jq -r '.id')
           USER_EMAIL="${ID}+${USERNAME}@users.noreply.github.com"
         else
           USER_EMAIL="<< parameters.commit-email >>"
@@ -74,43 +78,83 @@ steps:
         git config --global user.email "${USER_EMAIL}"
 
         # Ensure we're in the git repository root
-        cd "$(git rev-parse --show-toplevel)"
+        cd "$(git rev-parse --show-toplevel)" || exit 1
 
-        # Fetch all remote branches
-        git fetch origin
+        # Save the target file aside: its current content is the desired final
+        # state for the target branch and is committed verbatim (overwrite
+        # semantics). Do NOT merge it with whatever the target branch has —
+        # the previous stash/pop approach did exactly that, and when the pop
+        # conflicted (masked by `|| true`) it committed git conflict markers
+        # into the file, corrupting it further on every scheduled run.
+        TMP_FILE=$(mktemp)
+        cp -p "${TARGET_FILE}" "${TMP_FILE}"
 
-        # Stash any changes in the working directory
+        # Clear the working directory so the branch switch cannot conflict.
+        # Intentionally never popped: the copy saved above is the
+        # authoritative content. The stash entry keeps the pre-checkout state
+        # recoverable for debugging.
         git stash push -u
-
-        # Check if the branch exists remotely
-        if git show-ref --verify --quiet "refs/remotes/origin/<< parameters.branch >>"; then
-          echo "Branch << parameters.branch >> exists remotely, using it as base..."
-          # Create/reset local branch to track the remote one
-          git checkout -B "<< parameters.branch >>" "origin/<< parameters.branch >>"
-        else
-          echo "Creating new branch << parameters.branch >>..."
-          # Create new branch from current HEAD if it doesn't exist
-          git checkout -b "<< parameters.branch >>" HEAD
-        fi
-
-        # Reapply the stashed changes only if something was stashed
-        git stash pop || true
-
-        # Stage only the files from the target folder
-        git add "${TARGET_FILE}"
-
-        # Create commit if there are changes
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-          exit 0
-        fi
-
-        echo "Committing changes..."
-        git commit -m "${SKIP_CI}<< parameters.commit-message >>"
 
         SKIP_CI=""
         if [ "<< parameters.skip-ci >>" = true ]; then
           SKIP_CI="[skip ci] "
         fi
 
-        git push "https://x-access-token:${token}@github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}.git" "<< parameters.branch >>"
+        # Remember the commit this job ran from. When the target branch does
+        # not exist remotely, every retry attempt must branch from THIS
+        # commit: using HEAD would pick up the previous attempt's unpushed
+        # commit, making the no-changes check falsely succeed without ever
+        # pushing.
+        BASE_SHA=$(git rev-parse HEAD)
+
+        # Retry to absorb non-fast-forward rejections when something else
+        # pushes to the target branch between our fetch and our push.
+        PUSH_OK=false
+        for ATTEMPT in 1 2 3; do
+          # Fetch all remote branches
+          git fetch origin
+
+          # Check if the branch exists remotely
+          if git show-ref --verify --quiet "refs/remotes/origin/<< parameters.branch >>"; then
+            echo "Branch << parameters.branch >> exists remotely, using it as base..."
+            # Create/reset local branch to track the remote one
+            git checkout -B "<< parameters.branch >>" "origin/<< parameters.branch >>"
+          else
+            echo "Creating new branch << parameters.branch >>..."
+            # Create/reset branch from the original base commit (NOT HEAD,
+            # which after a failed attempt is that attempt's unpushed commit)
+            git checkout -B "<< parameters.branch >>" "${BASE_SHA}"
+          fi
+
+          # Overwrite the target branch's version of the file with the saved copy
+          mkdir -p "$(dirname "${TARGET_FILE}")"
+          cp -p "${TMP_FILE}" "${TARGET_FILE}"
+
+          # Stage only the target file
+          git add "${TARGET_FILE}"
+
+          # Create commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            PUSH_OK=true
+            break
+          fi
+
+          echo "Committing changes..."
+          git commit -m "${SKIP_CI}<< parameters.commit-message >>"
+
+          if git push "https://x-access-token:${token}@github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}.git" "<< parameters.branch >>"; then
+            PUSH_OK=true
+            break
+          fi
+
+          echo "Push attempt ${ATTEMPT} failed (target branch may have moved); retrying..."
+          sleep 5
+        done
+
+        rm -f "${TMP_FILE}"
+
+        if [ "${PUSH_OK}" != true ]; then
+          echo "Error: failed to push to << parameters.branch >> after 3 attempts."
+          exit 1
+        fi
