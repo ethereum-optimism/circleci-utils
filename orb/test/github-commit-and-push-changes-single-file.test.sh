@@ -25,6 +25,7 @@ extract_script() {
       -e 's/<< parameters.skip-ci >>/false/g' \
       "$ROOT/raw.sh" > "$ROOT/subst.sh"
   # test shim: push to local origin instead of github over https
+  # shellcheck disable=SC2016  # literal match of the non-expanded URL is intended
   sed 's|"https://x-access-token:${token}@github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}.git"|origin|' \
       "$ROOT/subst.sh" > "$ROOT/script.sh"
   echo fake-token > "$ROOT/token"
@@ -102,7 +103,7 @@ cp "$ROOT/same.json" "$SB/work/list.json"
 rc=$(run_script)
 check "script exits 0" "$rc"
 grep -q "No changes to commit" "$SB/out.log"; check "reports 'No changes to commit'" $?
-[ "$(git -C "$SB/work" log origin/updated-addresses --oneline | wc -l | tr -d ' ')" = 2 ]; check "no new commit created" $?
+COMMITS=$(git -C "$SB/work" log origin/updated-addresses --oneline | wc -l | tr -d ' '); RC=0; [ "$COMMITS" = 2 ] || RC=1; check "no new commit created" $RC
 
 # ---------- Scenario C: target branch does not exist remotely
 echo; echo "=== C. target branch does not exist remotely"
@@ -133,7 +134,7 @@ printf '[\n  "0xaaa",\n  "0xbbb",\n  "0xold",\n  "0xnew"\n]\n' > "$SB/work/list.
 ( run_script > "$SB/rc" ) &
 SCRIPT_PID=$!
 # wait for the first push to be rejected, then land a genuine competing commit
-for i in $(seq 1 100); do [ -f "$SB/.race-done" ] && break; sleep 0.1; done
+for _ in $(seq 1 100); do [ -f "$SB/.race-done" ] && break; sleep 0.1; done
 git clone -q "$SB/origin.git" "$SB/racer" 2>/dev/null
 git -C "$SB/racer" config user.email r@r && git -C "$SB/racer" config user.name racer
 git -C "$SB/racer" checkout -q updated-addresses
@@ -145,6 +146,19 @@ grep -q "Push attempt 1 failed" "$SB/out.log"; check "first push rejected, retry
 branch_file; grep -q "0xnew" "$SB/branch-file.json"; check "final branch file has generated content" $?
 git -C "$SB/work" log origin/updated-addresses --format=%s > "$SB/log.txt"; grep -q "racer commit" "$SB/log.txt"; check "racer commit survives (rebased on top, not clobbered)" $?
 git -C "$SB/work" show origin/updated-addresses:racer.txt >/dev/null 2>&1; check "racer's file change survives on the branch" $?
+
+# ---------- Scenario E: executable-bit change must be committed (cp -p)
+echo; echo "=== E. file mode change (non-executable on branch, executable generated)"
+new_sandbox E
+printf '[\n  "0xaaa",\n  "0xbbb",\n  "0xplain"\n]\n' > "$ROOT/plain.json"
+seed_branch "$ROOT/plain.json"   # branch has the file as 100644
+printf '[\n  "0xaaa",\n  "0xbbb",\n  "0xexec"\n]\n' > "$SB/work/list.json"
+chmod +x "$SB/work/list.json"    # generated file is executable
+rc=$(run_script)
+check "script exits 0" "$rc"
+git -C "$SB/work" fetch -q origin
+MODE=$(git -C "$SB/work" ls-tree origin/updated-addresses list.json | awk '{print $1}')
+RC=0; [ "$MODE" = "100755" ] || RC=1; check "executable bit committed to branch (mode $MODE)" $RC
 
 echo; echo "================================"
 echo "RESULT: $PASS passed, $FAIL failed"

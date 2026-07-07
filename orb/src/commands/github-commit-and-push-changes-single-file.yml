@@ -46,7 +46,7 @@ steps:
           exit 0
         fi
 
-        token=$(cat $SECRET_ACCESS_TOKEN_FILE_PATH) 
+        token=$(cat "$SECRET_ACCESS_TOKEN_FILE_PATH")
 
         # Store the absolute path of the target folder
         TARGET_FILE=$(realpath "<< parameters.file >>")
@@ -67,7 +67,7 @@ steps:
 
         if [ -z "<< parameters.commit-email >>" ]; then
           # Extract the email from the user info
-          ID=$(curl https://api.github.com/users/$USERNAME | jq -r '.id')
+          ID=$(curl "https://api.github.com/users/${USERNAME}" | jq -r '.id')
           USER_EMAIL="${ID}+${USERNAME}@users.noreply.github.com"
         else
           USER_EMAIL="<< parameters.commit-email >>"
@@ -78,7 +78,7 @@ steps:
         git config --global user.email "${USER_EMAIL}"
 
         # Ensure we're in the git repository root
-        cd "$(git rev-parse --show-toplevel)"
+        cd "$(git rev-parse --show-toplevel)" || exit 1
 
         # Save the target file aside: its current content is the desired final
         # state for the target branch and is committed verbatim (overwrite
@@ -87,7 +87,7 @@ steps:
         # conflicted (masked by `|| true`) it committed git conflict markers
         # into the file, corrupting it further on every scheduled run.
         TMP_FILE=$(mktemp)
-        cp "${TARGET_FILE}" "${TMP_FILE}"
+        cp -p "${TARGET_FILE}" "${TMP_FILE}"
 
         # Clear the working directory so the branch switch cannot conflict.
         # Intentionally never popped: the copy saved above is the
@@ -120,7 +120,7 @@ steps:
 
           # Overwrite the target branch's version of the file with the saved copy
           mkdir -p "$(dirname "${TARGET_FILE}")"
-          cp "${TMP_FILE}" "${TARGET_FILE}"
+          cp -p "${TMP_FILE}" "${TARGET_FILE}"
 
           # Stage only the target file
           git add "${TARGET_FILE}"
