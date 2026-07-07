@@ -100,6 +100,13 @@ steps:
           SKIP_CI="[skip ci] "
         fi
 
+        # Remember the commit this job ran from. When the target branch does
+        # not exist remotely, every retry attempt must branch from THIS
+        # commit: using HEAD would pick up the previous attempt's unpushed
+        # commit, making the no-changes check falsely succeed without ever
+        # pushing.
+        BASE_SHA=$(git rev-parse HEAD)
+
         # Retry to absorb non-fast-forward rejections when something else
         # pushes to the target branch between our fetch and our push.
         PUSH_OK=false
@@ -114,8 +121,9 @@ steps:
             git checkout -B "<< parameters.branch >>" "origin/<< parameters.branch >>"
           else
             echo "Creating new branch << parameters.branch >>..."
-            # Create/reset branch from current HEAD if it doesn't exist remotely
-            git checkout -B "<< parameters.branch >>" HEAD
+            # Create/reset branch from the original base commit (NOT HEAD,
+            # which after a failed attempt is that attempt's unpushed commit)
+            git checkout -B "<< parameters.branch >>" "${BASE_SHA}"
           fi
 
           # Overwrite the target branch's version of the file with the saved copy

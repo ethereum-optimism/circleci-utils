@@ -160,6 +160,31 @@ git -C "$SB/work" fetch -q origin
 MODE=$(git -C "$SB/work" ls-tree origin/updated-addresses list.json | awk '{print $1}')
 RC=0; [ "$MODE" = "100755" ] || RC=1; check "executable bit committed to branch (mode $MODE)" $RC
 
+# ---------- Scenario F: new branch + first push rejected (regression: false success without pushing)
+echo; echo "=== F. new branch, first push rejected: retry must still create the remote branch"
+new_sandbox F
+cat > "$SB/origin.git/hooks/pre-receive" <<HOOK
+#!/bin/sh
+if [ ! -f "$SB/.race-done" ]; then
+  touch "$SB/.race-done"
+  echo "simulated rejection of first push" >&2
+  exit 1
+fi
+exit 0
+HOOK
+chmod +x "$SB/origin.git/hooks/pre-receive"
+printf '[\n  "0xaaa",\n  "0xbbb",\n  "0xfresh2"\n]\n' > "$SB/work/list.json"
+rc=$(run_script)
+check "script exits 0" "$rc"
+grep -q "Push attempt 1 failed" "$SB/out.log"; check "first push rejected, retry triggered" $?
+REMOTE_REFS=$(git -C "$SB/work" ls-remote --heads origin updated-addresses | wc -l | tr -d ' ')
+RC=0; [ "$REMOTE_REFS" = 1 ] || RC=1; check "remote branch actually exists after reported success" $RC
+if [ "$REMOTE_REFS" = 1 ]; then
+  branch_file; grep -q "0xfresh2" "$SB/branch-file.json"; check "remote branch has generated content" $?
+else
+  check "remote branch has generated content" 1
+fi
+
 echo; echo "================================"
 echo "RESULT: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
