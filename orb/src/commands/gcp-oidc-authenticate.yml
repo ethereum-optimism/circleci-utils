@@ -28,8 +28,17 @@ parameters:
     type: string
     default: "always"
     description: "The condition to run the command. 0 and always are considered true, everything else is false"
+  gcloud_version:
+    type: string
+    default: "latest"
+    description: >
+      The version of the gcloud CLI to install, forwarded to gcp-cli/install.
+      Defaults to "latest". Pin to a concrete version (e.g. "576.0.0") to avoid
+      the orb's "latest" resolution, which scrapes Google's release-notes HTML
+      and breaks when that page changes or a new release is not yet downloadable.
 steps:
-  - gcp-cli/install
+  - gcp-cli/install:
+      version: << parameters.gcloud_version >>
   - run:
       name: "Create OIDC credential configuration"
       command: |
