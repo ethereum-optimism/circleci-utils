@@ -1,5 +1,5 @@
 from github import Github
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dateutil.parser import parse as parse_date
 from pprint import pprint
 from typing import Optional  # Import Optional for type hinting
@@ -105,6 +105,21 @@ def is_stale(updated_at: str, days_before_stale: int) -> bool:
     return days_since_update >= days_before_stale
 
 
+# Activity within this window after the stale label was applied is attributed
+# to the marking itself (adding the label and posting the stale comment both
+# bump updated_at), not to a real update on the PR.
+STALE_MARKING_GRACE = timedelta(minutes=5)
+
+
+def get_stale_label_applied_at(pr, stale_issue_label: str) -> Optional[datetime]:
+    """Get when the stale label was most recently applied to a PR."""
+    labeled_at = None
+    for event in pr.as_issue().get_events():
+        if event.event == "labeled" and event.label and event.label.name == stale_issue_label:
+            labeled_at = event.created_at
+    return labeled_at
+
+
 def get_comments_ids(github: Github, repo: str, pr_number: int, message_substring: str, user_type: str) -> list:
     """
     Fetch all comments in a pull request and extract comment IDs based on a specific condition.
@@ -184,15 +199,29 @@ def process_pull_requests(
                 continue
 
             # Check if the PR is stale
-            if is_stale(pr.updated_at, days_before_stale):
-                if stale_issue_label not in [label.name for label in pr.labels]:
+            if stale_issue_label in [label.name for label in pr.labels]:
+                # Marking a PR stale bumps updated_at, so the close countdown
+                # is measured from when the stale label was applied instead.
+                labeled_at = get_stale_label_applied_at(pr, stale_issue_label)
+                if labeled_at is None:
+                    # No labeled event found; fall back to the last update.
+                    labeled_at = pr.updated_at
+                updated_at = pr.updated_at.replace(tzinfo=timezone.utc)
+                if updated_at > labeled_at.replace(tzinfo=timezone.utc) + STALE_MARKING_GRACE:
                     print(
-                        f"PR #{pr.number} is stale. Adding stale label and posting comment.")
-                    pr.as_issue().add_to_labels(stale_issue_label)
-                    pr.create_issue_comment(stale_pr_message)
-                elif is_stale(pr.updated_at, days_before_stale + days_before_close):
+                        f"PR #{pr.number} was updated after being marked stale. Removing stale label.")
+                    pr.as_issue().remove_from_labels(stale_issue_label)
+                elif is_stale(labeled_at, days_before_close):
                     print(f"PR #{pr.number} is stale and will be closed.")
                     pr.edit(state="closed")
+                else:
+                    print(
+                        f"PR #{pr.number} is marked stale; the stale label was applied less than {days_before_close} days ago.")
+            elif is_stale(pr.updated_at, days_before_stale):
+                print(
+                    f"PR #{pr.number} is stale. Adding stale label and posting comment.")
+                pr.as_issue().add_to_labels(stale_issue_label)
+                pr.create_issue_comment(stale_pr_message)
             else:
                 print(f"PR #{pr.number} is not stale.")
         except Exception as e:
