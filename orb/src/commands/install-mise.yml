@@ -90,9 +90,12 @@ steps:
           if mise install -v -y; then
             echo "mise install completed successfully on attempt ${attempt}."
             exit 0
+          else
+            # $? at the top of the else branch is mise's exit status; after
+            # the if statement it would be the if's own status (always 0).
+            status=$?
           fi
 
-          status=$?
           echo "mise install failed with exit code ${status} on attempt ${attempt}."
           attempt=$((attempt + 1))
         done
