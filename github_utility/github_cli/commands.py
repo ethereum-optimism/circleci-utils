@@ -105,6 +105,15 @@ def is_stale(updated_at: str, days_before_stale: int) -> bool:
     return days_since_update >= days_before_stale
 
 
+def get_stale_label_event(pr, stale_issue_label: str):
+    """Get the most recent event applying the stale label."""
+    labeled_event = None
+    for event in pr.as_issue().get_events():
+        if event.event == "labeled" and event.label and event.label.name == stale_issue_label:
+            labeled_event = event
+    return labeled_event
+
+
 def get_comments_ids(github: Github, repo: str, pr_number: int, message_substring: str, user_type: str) -> list:
     """
     Fetch all comments in a pull request and extract comment IDs based on a specific condition.
@@ -178,21 +187,57 @@ def process_pull_requests(
 
     for pr in prs:
         try:
+            label_names = [label.name for label in pr.labels]
+
             # Skip if PR has an exempt label
-            if any(label.name in exempt_labels for label in pr.labels):
+            if any(label_name in exempt_labels for label_name in label_names):
+                if stale_issue_label in label_names:
+                    pr.as_issue().remove_from_labels(stale_issue_label)
                 print(f"Skipping PR #{pr.number} due to exempt label.")
                 continue
 
             # Check if the PR is stale
-            if is_stale(pr.updated_at, days_before_stale):
-                if stale_issue_label not in [label.name for label in pr.labels]:
+            if stale_issue_label in label_names:
+                # Marking a PR stale bumps updated_at, so the close countdown
+                # is measured from when the stale label was applied instead.
+                labeled_event = get_stale_label_event(pr, stale_issue_label)
+                if labeled_event is None:
+                    # No labeled event found; fall back to the last update.
+                    labeled_at = pr.updated_at
+                    stale_marking_completed_at = labeled_at
+                else:
+                    labeled_at = labeled_event.created_at
+                    # Older runs posted the stale comment after adding the
+                    # label, so treat the matching comment from the same
+                    # actor as part of the marking, not as new activity.
+                    stale_marking_completed_at = labeled_at
+                    for comment in pr.get_issue_comments():
+                        if (
+                            comment.user.login == labeled_event.actor.login
+                            and comment.body == stale_pr_message
+                            and comment.created_at >= labeled_at
+                        ):
+                            stale_marking_completed_at = max(
+                                stale_marking_completed_at,
+                                comment.created_at,
+                            )
+                updated_at = pr.updated_at.replace(tzinfo=timezone.utc)
+                if updated_at > stale_marking_completed_at.replace(tzinfo=timezone.utc):
                     print(
-                        f"PR #{pr.number} is stale. Adding stale label and posting comment.")
-                    pr.as_issue().add_to_labels(stale_issue_label)
-                    pr.create_issue_comment(stale_pr_message)
-                elif is_stale(pr.updated_at, days_before_stale + days_before_close):
+                        f"PR #{pr.number} was updated after being marked stale. Removing stale label.")
+                    pr.as_issue().remove_from_labels(stale_issue_label)
+                elif is_stale(labeled_at, days_before_close):
                     print(f"PR #{pr.number} is stale and will be closed.")
                     pr.edit(state="closed")
+                else:
+                    print(
+                        f"PR #{pr.number} is marked stale; the stale label was applied less than {days_before_close} days ago.")
+            elif is_stale(pr.updated_at, days_before_stale):
+                print(
+                    f"PR #{pr.number} is stale. Adding stale label and posting comment.")
+                pr.create_issue_comment(stale_pr_message)
+                # Add the label last so its timestamp marks when stale marking completed.
+                pr.as_issue().add_to_labels(stale_issue_label)
             else:
                 print(f"PR #{pr.number} is not stale.")
         except Exception as e:
