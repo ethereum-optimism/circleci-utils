@@ -1,1 +1,5 @@
 * @ethereum-optimism/platforms-team
+
+/.github/workflows/ @ethereum-optimism/platforms-team @ethereum-optimism/cloud-security
+/renovate.json @ethereum-optimism/platforms-team @ethereum-optimism/cloud-security
+/.github/dependency-review-config.yml @ethereum-optimism/platforms-team @ethereum-optimism/cloud-security
