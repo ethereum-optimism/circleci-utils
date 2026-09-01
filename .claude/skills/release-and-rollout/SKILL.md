@@ -10,10 +10,10 @@ change only reaches CI once both have been advanced *and* the consumer's orb pin
 
 ## Two tag series - don't confuse them
 
-| Tag         | Releases                                                              | Example      |
-| ----------- | --------------------------------------------------------------------- | ------------ |
-| `vX.Y.Z`    | The source tree (`github_utility/`, scripts) that jobs clone at runtime | `v0.6.1`     |
-| `orb/X.Y.Z` | Bookkeeping mirror of a published CircleCI orb version                 | `orb/1.0.30` |
+| Tag         | Releases                                                                |
+| ----------- | ----------------------------------------------------------------------- |
+| `vX.Y.Z`    | The source tree (`github_utility/`, scripts) that jobs clone at runtime |
+| `orb/X.Y.Z` | Bookkeeping mirror of a published CircleCI orb version                  |
 
 The two version numbers are unrelated. Orb versions live in CircleCI, not in git -
 `orb/*` tags are only created after the fact by `orb/publish-prod-repository-tag.sh`
@@ -29,9 +29,8 @@ git clone --branch << parameters.circleci-utils-tag >> --depth 1 \
 ```
 
 `circleci-utils-tag` has a `default` in that file, and that default is frozen into every
-*published* orb version. A consumer pinned to `circleci-utils@1.0.30` runs whatever tag
-1.0.30 was published with, no matter what `main` says. The default sat at `v0.5.0` up to
-and including orb 1.0.30, so production ran that code for a long time after fixes merged.
+*published* orb version. A consumer runs whatever tag its pinned orb version was published
+with, no matter what `main` says.
 
 No orb command forwards `circleci-utils-tag` to the setup command, so consumers cannot
 pick up new source code by passing a parameter to the command they actually call.
@@ -91,7 +90,7 @@ command itself first with an explicit tag:
 - utils/github-stale:
     pre-steps:
       - utils/setup-circleci-utils-and-github-token:
-          circleci-utils-tag: v0.6.1
+          circleci-utils-tag: vX.Y.Z
 ```
 
 This works because the setup command clones only if `/tmp/circleci-utils` doesn't exist,
