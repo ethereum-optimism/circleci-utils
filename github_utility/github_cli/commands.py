@@ -105,13 +105,13 @@ def is_stale(updated_at: str, days_before_stale: int) -> bool:
     return days_since_update >= days_before_stale
 
 
-def get_stale_label_applied_at(pr, stale_issue_label: str) -> Optional[datetime]:
-    """Get when the stale label was most recently applied to a PR."""
-    labeled_at = None
+def get_stale_label_event(pr, stale_issue_label: str):
+    """Get the most recent event applying the stale label."""
+    labeled_event = None
     for event in pr.as_issue().get_events():
         if event.event == "labeled" and event.label and event.label.name == stale_issue_label:
-            labeled_at = event.created_at
-    return labeled_at
+            labeled_event = event
+    return labeled_event
 
 
 def get_comments_ids(github: Github, repo: str, pr_number: int, message_substring: str, user_type: str) -> list:
@@ -200,12 +200,29 @@ def process_pull_requests(
             if stale_issue_label in label_names:
                 # Marking a PR stale bumps updated_at, so the close countdown
                 # is measured from when the stale label was applied instead.
-                labeled_at = get_stale_label_applied_at(pr, stale_issue_label)
-                if labeled_at is None:
+                labeled_event = get_stale_label_event(pr, stale_issue_label)
+                if labeled_event is None:
                     # No labeled event found; fall back to the last update.
                     labeled_at = pr.updated_at
+                    stale_marking_completed_at = labeled_at
+                else:
+                    labeled_at = labeled_event.created_at
+                    # Older runs posted the stale comment after adding the
+                    # label, so treat the matching comment from the same
+                    # actor as part of the marking, not as new activity.
+                    stale_marking_completed_at = labeled_at
+                    for comment in pr.get_issue_comments():
+                        if (
+                            comment.user.login == labeled_event.actor.login
+                            and comment.body == stale_pr_message
+                            and comment.created_at >= labeled_at
+                        ):
+                            stale_marking_completed_at = max(
+                                stale_marking_completed_at,
+                                comment.created_at,
+                            )
                 updated_at = pr.updated_at.replace(tzinfo=timezone.utc)
-                if updated_at > labeled_at.replace(tzinfo=timezone.utc):
+                if updated_at > stale_marking_completed_at.replace(tzinfo=timezone.utc):
                     print(
                         f"PR #{pr.number} was updated after being marked stale. Removing stale label.")
                     pr.as_issue().remove_from_labels(stale_issue_label)
