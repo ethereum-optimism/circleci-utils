@@ -3,7 +3,7 @@ description: >
 parameters:
   circleci-utils-tag:
     type: string
-    default: "v0.5.0"
+    default: "v0.6.1"
     description: "The version of the circleci-utils to use"
   private-key-str:
     type: env_var_name
