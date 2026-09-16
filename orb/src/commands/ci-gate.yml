@@ -54,8 +54,6 @@ steps:
           echo "$all_items"
         }
 
-        JOBS=$(fetch_all_jobs)
-
         # Derive required jobs from this job's dependencies in the API response.
         # The name must match $CIRCLE_JOB (e.g. ci-gate on main, required-contracts-ci on contracts workflows).
         GATE_NAME="${CIRCLE_JOB:-}"
@@ -63,7 +61,28 @@ steps:
           echo "ERROR: CIRCLE_JOB is not set"
           exit 1
         fi
-        DEP_IDS=$(echo "$JOBS" | jq -r --arg name "$GATE_NAME" '.[] | select(.name == $name) | .dependencies[]')
+
+        # The jobs API can briefly lag the scheduler that starts this terminal fan-in job.
+        # Retry only while direct dependencies have non-terminal states.
+        for ATTEMPT in {1..12}; do
+          JOBS=$(fetch_all_jobs)
+          DEP_IDS=$(echo "$JOBS" | jq -r --arg name "$GATE_NAME" '.[] | select(.name == $name) | .dependencies[]')
+          STALE=false
+          FAILED=false
+          for dep_id in $DEP_IDS; do
+            STATUS=$(echo "$JOBS" | jq -r --arg id "$dep_id" '.[] | select(.id == $id) | .status')
+            case "$STATUS" in
+              success) ;;
+              running|queued|not_run|not_running|blocked|on_hold) STALE=true ;;
+              *) FAILED=true ;;
+            esac
+          done
+          if [ "$STALE" = "false" ] || [ "$FAILED" = "true" ] || [ "$ATTEMPT" -eq 12 ]; then
+            break
+          fi
+          echo "Dependency statuses have not settled (attempt $ATTEMPT/12); retrying in 5s..."
+          sleep 5
+        done
 
         if [ -z "$DEP_IDS" ]; then
           echo "ERROR: no dependency IDs found — possible API failure or gate job \"$GATE_NAME\" not found in workflow"
