@@ -269,10 +269,11 @@ This keeps the repository tags synchronized with the orb versions.
 
 ## checkout-with-mise cache + retry
 
-- Optional caching around `mise install -y`/ubi (set `enable-mise-cache: true`) saves/restores `~/.local/share/mise`, `~/.cache/mise`, `~/.cache/ubi`.
-- Cache key params: `mise-cache-key-prefix` (default `mise-cache`) and `mise-cache-checksum` (default `{{ checksum "mise.toml" }}`; set to any checksum expression or value to combine multiple configs or break the cache).
+- The mise data cache is always restored and saved unless `fresh-install` is set. It holds `/data/mise-data`, which contains every installed tool, and the mise binary itself. It is keyed on the executor user and `mise.toml`.
+- Optional caching around `mise install -y`/ubi (set `enable-mise-cache: true`) also saves/restores `~/.local/share/mise`, `~/.cache/mise`, `~/.cache/ubi`.
+- Cache key params for the optional cache: `mise-cache-key-prefix` (default `mise-cache`) and `mise-cache-checksum` (default `{{ checksum "mise.toml" }}`; set to any checksum expression or value to combine multiple configs or break the cache).
+- `fresh-install: true` skips both caches. mise is downloaded and checked against its published checksum, every tool is installed from its source, and nothing is saved. Use it for jobs whose output must not depend on what an earlier job saved to a cache, such as release builds. Expect a slower job that depends on upstream downloads.
 - Install step retries with backoff (0s, 15s, 45s, 90s) to ride out GitHub 403 rate limits before failing.
-- Defaults keep previous behavior; enable caching explicitly per job.
 
 Example:
 ```yaml

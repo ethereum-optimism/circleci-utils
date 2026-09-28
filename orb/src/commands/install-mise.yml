@@ -13,6 +13,13 @@ parameters:
   mise_cache_checksum:
     type: string
     default: '{{ checksum "mise.toml" }}'
+  fresh_install:
+    description: >
+      Skip every cache: download mise with checksum verification and install all tools from
+      their sources, then save nothing. Use for jobs whose output must not depend on content
+      an earlier job saved to a cache, such as release builds. Overrides enable_mise_cache.
+    type: boolean
+    default: false
 steps:
   - run:
       name: Initialize mise environment
@@ -33,10 +40,13 @@ steps:
         sudo mkdir -p /data/mise-data
         sudo chown -R "$user:$user" /data/mise-data
         echo "Created directories."
-  - restore_cache:
-      name: Restore mise cache
-      keys:
-        - mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
+  - unless:
+      condition: << parameters.fresh_install >>
+      steps:
+        - restore_cache:
+            name: Restore mise cache
+            keys:
+              - mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
   - run:
       name: Move cached mise
       command: |
@@ -66,7 +76,10 @@ steps:
         echo "export MISE_CARGO_HOME=\${MISE_DATA_DIR}/.cargo" >> "$BASH_ENV"
         echo "export MISE_RUSTUP_HOME=\${MISE_DATA_DIR}/.rustup" >> "$BASH_ENV"
   - when:
-      condition: << parameters.enable_mise_cache >>
+      condition:
+        and:
+          - << parameters.enable_mise_cache >>
+          - not: << parameters.fresh_install >>
       steps:
         - restore_cache:
             name: Restore mise/ubi install cache
@@ -103,7 +116,10 @@ steps:
         echo "mise install failed after $((attempt - 1)) attempts (backoffs: ${backoffs})."
         exit 1
   - when:
-      condition: << parameters.enable_mise_cache >>
+      condition:
+        and:
+          - << parameters.enable_mise_cache >>
+          - not: << parameters.fresh_install >>
       steps:
         - save_cache:
             name: Save mise/ubi install cache
@@ -112,12 +128,15 @@ steps:
               - ~/.local/share/mise
               - ~/.cache/mise
               - ~/.cache/ubi
-  - save_cache:
-      name: Save mise cache
-      key: mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
-      paths:
-        - /data/mise-data
-        - /tmp/cached-mise
+  - unless:
+      condition: << parameters.fresh_install >>
+      steps:
+        - save_cache:
+            name: Save mise cache
+            key: mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
+            paths:
+              - /data/mise-data
+              - /tmp/cached-mise
   - run:
       name: Delete executor file
       command: |
