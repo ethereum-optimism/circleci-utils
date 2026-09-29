@@ -47,15 +47,27 @@ steps:
             name: Restore mise cache
             keys:
               - mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
-  - run:
-      name: Move cached mise
-      command: |
-        if [ -x "/tmp/cached-mise" ]; then
-          echo "Cached mise found, moving to $HOME/.local/bin/mise."
-          mv /tmp/cached-mise "$HOME/.local/bin/mise"
-        else
-          echo "Cached mise not found."
-        fi
+  - when:
+      condition: << parameters.fresh_install >>
+      steps:
+        - run:
+            name: Remove existing mise
+            command: |
+              # install_mise.sh skips the verified download if any mise is on PATH, and
+              # non-ephemeral executors can keep one from an earlier job.
+              rm -f /tmp/cached-mise "$HOME/.local/bin/mise"
+  - unless:
+      condition: << parameters.fresh_install >>
+      steps:
+        - run:
+            name: Move cached mise
+            command: |
+              if [ -x "/tmp/cached-mise" ]; then
+                echo "Cached mise found, moving to $HOME/.local/bin/mise."
+                mv /tmp/cached-mise "$HOME/.local/bin/mise"
+              else
+                echo "Cached mise not found."
+              fi
   - run:
       name: Install mise
       max_auto_reruns: 3  # allow 3 retries in case of transient errors
