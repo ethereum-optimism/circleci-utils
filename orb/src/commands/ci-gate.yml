@@ -62,9 +62,11 @@ steps:
           exit 1
         fi
 
-        # The jobs API can briefly lag the scheduler that starts this terminal fan-in job.
-        # Retry only while direct dependencies have non-terminal states.
-        for ATTEMPT in {1..12}; do
+        # The jobs API can lag the scheduler by several minutes, even after every
+        # dependency has finished. Allow up to five minutes for it to settle,
+        # retrying only while direct dependencies have non-terminal states.
+        MAX_ATTEMPTS=60
+        for ((ATTEMPT=1; ATTEMPT<=MAX_ATTEMPTS; ATTEMPT++)); do
           JOBS=$(fetch_all_jobs)
           DEP_IDS=$(echo "$JOBS" | jq -r --arg name "$GATE_NAME" '.[] | select(.name == $name) | .dependencies[]')
           STALE=false
@@ -73,14 +75,18 @@ steps:
             STATUS=$(echo "$JOBS" | jq -r --arg id "$dep_id" '.[] | select(.id == $id) | .status')
             case "$STATUS" in
               success) ;;
-              running|queued|not_run|not_running|blocked|on_hold) STALE=true ;;
+              running|queued|not_run|not_running|blocked|on_hold)
+                STALE=true
+                NAME=$(echo "$JOBS" | jq -r --arg id "$dep_id" '.[] | select(.id == $id) | .name')
+                echo "  Waiting for $NAME ($dep_id): $STATUS"
+                ;;
               *) FAILED=true ;;
             esac
           done
-          if [ "$STALE" = "false" ] || [ "$FAILED" = "true" ] || [ "$ATTEMPT" -eq 12 ]; then
+          if [ "$STALE" = "false" ] || [ "$FAILED" = "true" ] || [ "$ATTEMPT" -eq "$MAX_ATTEMPTS" ]; then
             break
           fi
-          echo "Dependency statuses have not settled (attempt $ATTEMPT/12); retrying in 5s..."
+          echo "Dependency statuses have not settled (attempt $ATTEMPT/$MAX_ATTEMPTS); retrying in 5s..."
           sleep 5
         done
 
