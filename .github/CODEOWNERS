@@ -3,3 +3,9 @@
 /.github/workflows/ @ethereum-optimism/platforms-team @ethereum-optimism/cloud-security
 /renovate.json @ethereum-optimism/platforms-team @ethereum-optimism/cloud-security
 /.github/dependency-review-config.yml @ethereum-optimism/platforms-team @ethereum-optimism/cloud-security
+
+# GitHub Actions inputs
+/.github/workflows/ @ethereum-optimism/cloud-security
+/.github/actions/   @ethereum-optimism/cloud-security
+/.github/scripts/   @ethereum-optimism/cloud-security
+/.github/CODEOWNERS @ethereum-optimism/cloud-security
