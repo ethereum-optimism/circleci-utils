@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 
-if command -v mise; then
-    echo "mise already installed at $(command -v mise)"
+# Only a mise at the install path counts: the orb restores its cached mise there and copies it
+# from there. A mise elsewhere on PATH would bypass the checksum-verified download.
+if [ -x "${MISE_INSTALL_PATH:-$HOME/.local/bin/mise}" ]; then
+    echo "mise already installed at ${MISE_INSTALL_PATH:-$HOME/.local/bin/mise}"
     exit 0
 fi
 

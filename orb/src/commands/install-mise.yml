@@ -4,6 +4,13 @@ parameters:
   mise_config:
     type: string
     default: "mise.toml"
+  trusted_branch:
+    description: >
+      The branch whose mise caches every branch may use. Set it to the repository's default
+      branch if that isn't main. Each branch restores its own caches or this branch's, and saves
+      only under its own name, so what one branch saves reaches only jobs on a branch of that name.
+    type: string
+    default: "main"
   enable_mise_cache:
     type: boolean
     default: false
@@ -39,23 +46,24 @@ steps:
         sudo rm -rf "$workdir/mise-data"
         sudo mkdir -p /data/mise-data
         sudo chown -R "$user:$user" /data/mise-data
+        rm -f /tmp/cached-mise /tmp/mise-cache-hit /tmp/mise-cache-save-user /tmp/mise-cache-skip
+        # Non-ephemeral executors can keep mise and its metadata from an earlier job, maybe on
+        # another branch. Start without them, so this job uses only what it restores or installs.
+        rm -f "$HOME/.local/bin/mise"
+        rm -rf "$HOME/.cache/mise" "$HOME/.cache/ubi" "$HOME/.local/share/mise"
         echo "Created directories."
+  # The caches are scoped by branch: "<branch>:" in each key. A branch restores its own caches or
+  # the trusted branch's, and saves only under its own name. git forbids ':' in branch names, so
+  # "main:" can't match a branch like main-fix. CircleCI caches have no access control, so this
+  # doesn't stop anyone who can push edited config from saving under the trusted branch's keys.
   - unless:
       condition: << parameters.fresh_install >>
       steps:
         - restore_cache:
             name: Restore mise cache
             keys:
-              - mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
-  - when:
-      condition: << parameters.fresh_install >>
-      steps:
-        - run:
-            name: Remove existing mise
-            command: |
-              # install_mise.sh skips the verified download if any mise is on PATH, and
-              # non-ephemeral executors can keep one from an earlier job.
-              rm -f /tmp/cached-mise "$HOME/.local/bin/mise"
+              - mise-v9-{{ checksum ".executor-user" }}-{{ .Branch }}:{{ checksum "<< parameters.mise_config >>" }}
+              - mise-v9-{{ checksum ".executor-user" }}-<< parameters.trusted_branch >>:{{ checksum "<< parameters.mise_config >>" }}
   - unless:
       condition: << parameters.fresh_install >>
       steps:
@@ -65,6 +73,8 @@ steps:
               if [ -x "/tmp/cached-mise" ]; then
                 echo "Cached mise found, moving to $HOME/.local/bin/mise."
                 mv /tmp/cached-mise "$HOME/.local/bin/mise"
+                # The cache is keyed on mise_config, so it holds every tool this config needs.
+                touch /tmp/mise-cache-hit
               else
                 echo "Cached mise not found."
               fi
@@ -93,11 +103,15 @@ steps:
           - << parameters.enable_mise_cache >>
           - not: << parameters.fresh_install >>
       steps:
+        # "v2" keeps these keys out of older orb versions' "<prefix>-<user>" fallback. This cache
+        # only matters when mise installs tools, so it's saved under the same rule as the tools.
         - restore_cache:
             name: Restore mise/ubi install cache
             keys:
-              - << parameters.mise_cache_key_prefix >>-{{ checksum ".executor-user" }}-<< parameters.mise_cache_checksum >>
-              - << parameters.mise_cache_key_prefix >>-{{ checksum ".executor-user" }}
+              - << parameters.mise_cache_key_prefix >>-v2-{{ checksum ".executor-user" }}-{{ .Branch }}:<< parameters.mise_cache_checksum >>
+              - << parameters.mise_cache_key_prefix >>-v2-{{ checksum ".executor-user" }}-<< parameters.trusted_branch >>:<< parameters.mise_cache_checksum >>
+              - '<< parameters.mise_cache_key_prefix >>-v2-{{ checksum ".executor-user" }}-{{ .Branch }}:'
+              - '<< parameters.mise_cache_key_prefix >>-v2-{{ checksum ".executor-user" }}-<< parameters.trusted_branch >>:'
   - run:
       name: Install mise deps (with retry)
       command: |
@@ -127,6 +141,39 @@ steps:
 
         echo "mise install failed after $((attempt - 1)) attempts (backoffs: ${backoffs})."
         exit 1
+  - unless:
+      condition: << parameters.fresh_install >>
+      steps:
+        - run:
+            name: Decide whether to save mise caches
+            command: |
+              # A job saves only when it had to install the tools, so a branch doesn't upload a
+              # copy of the caches it restored. The save keys below use this file's checksum in
+              # place of the executor user's: on a skip it holds a marker instead, the keys
+              # resolve to small placeholder entries, and those already exist after the first
+              # save, so CircleCI skips the upload.
+              echo "no save: placeholder for mise caches" > /tmp/mise-cache-skip
+              if [ -z "${CIRCLE_BRANCH:-}" ]; then
+                echo "No branch (tag build): not saving mise caches."
+                cp /tmp/mise-cache-skip /tmp/mise-cache-save-user
+              elif [ -f /tmp/mise-cache-hit ]; then
+                echo "Restored a cache for this mise config: not saving mise caches."
+                cp /tmp/mise-cache-skip /tmp/mise-cache-save-user
+              else
+                echo "Installed tools: saving mise caches for branch ${CIRCLE_BRANCH}."
+                cp .executor-user /tmp/mise-cache-save-user
+              fi
+        - save_cache:
+            name: Save mise cache placeholder
+            key: mise-v9-{{ checksum "/tmp/mise-cache-skip" }}-{{ .Branch }}:{{ checksum "<< parameters.mise_config >>" }}
+            paths:
+              - /tmp/mise-cache-skip
+        - save_cache:
+            name: Save mise cache
+            key: mise-v9-{{ checksum "/tmp/mise-cache-save-user" }}-{{ .Branch }}:{{ checksum "<< parameters.mise_config >>" }}
+            paths:
+              - /data/mise-data
+              - /tmp/cached-mise
   - when:
       condition:
         and:
@@ -134,21 +181,17 @@ steps:
           - not: << parameters.fresh_install >>
       steps:
         - save_cache:
+            name: Save mise/ubi install cache placeholder
+            key: << parameters.mise_cache_key_prefix >>-v2-{{ checksum "/tmp/mise-cache-skip" }}-{{ .Branch }}:<< parameters.mise_cache_checksum >>
+            paths:
+              - /tmp/mise-cache-skip
+        - save_cache:
             name: Save mise/ubi install cache
-            key: << parameters.mise_cache_key_prefix >>-{{ checksum ".executor-user" }}-<< parameters.mise_cache_checksum >>
+            key: << parameters.mise_cache_key_prefix >>-v2-{{ checksum "/tmp/mise-cache-save-user" }}-{{ .Branch }}:<< parameters.mise_cache_checksum >>
             paths:
               - ~/.local/share/mise
               - ~/.cache/mise
               - ~/.cache/ubi
-  - unless:
-      condition: << parameters.fresh_install >>
-      steps:
-        - save_cache:
-            name: Save mise cache
-            key: mise-v8-{{ checksum ".executor-user" }}-{{ checksum "<< parameters.mise_config >>" }}
-            paths:
-              - /data/mise-data
-              - /tmp/cached-mise
   - run:
       name: Delete executor file
       command: |

@@ -7,6 +7,10 @@ parameters:
       - blobless
       - full
     default: full
+  trusted-branch:
+    description: The branch whose mise caches every branch may use. See install-mise's trusted_branch.
+    type: string
+    default: "main"
   enable-mise-cache:
     type: boolean
     default: false
@@ -24,6 +28,7 @@ steps:
   - checkout:
       method: << parameters.checkout-method >>
   - install-mise:
+      trusted_branch: << parameters.trusted-branch >>
       enable_mise_cache: << parameters.enable-mise-cache >>
       mise_cache_key_prefix: << parameters.mise-cache-key-prefix >>
       mise_cache_checksum: << parameters.mise-cache-checksum >>
