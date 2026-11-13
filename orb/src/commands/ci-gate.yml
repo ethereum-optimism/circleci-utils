@@ -41,7 +41,7 @@ steps:
             fi
 
             local page
-            page=$(curl -sf -H "Circle-Token: $token" "$url")
+            page=$(curl -sSf -H "Circle-Token: $token" "$url")
 
             all_items=$(echo "$all_items $page" | jq -s '.[0] + .[1].items')
             next_token=$(echo "$page" | jq -r '.next_page_token // empty')
